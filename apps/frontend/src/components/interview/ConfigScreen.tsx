@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { io, Socket } from 'socket.io-client'
-import { Play } from 'lucide-react'
+import { Play, Mic, MicOff, Check, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,8 @@ const LEVEL_OPTIONS: { value: LevelOption; label: string }[] = [
   { value: 'senior', label: 'Senior' },
 ]
 
+type MicTestStatus = 'idle' | 'testing' | 'success' | 'failed'
+
 export function ConfigScreen() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
@@ -33,10 +35,12 @@ export function ConfigScreen() {
   const [level, setLevel] = useState<LevelOption>('mid')
   const [countdown, setCountdown] = useState<number | null>(null)
   const [preloading, setPreloading] = useState(false)
+  const [micTestStatus, setMicTestStatus] = useState<MicTestStatus>('idle')
   const socketRef = useRef<Socket | null>(null)
   const preloadedDataRef = useRef<{ text: string; interviewerName: string; interviewerGender?: Gender } | null>(null)
   const navigate = useNavigate()
   const { setConfig, setPreloadedMessage } = useInterviewStore()
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     interviewApi.getTopics().then(setTopics).catch(() => {
@@ -77,12 +81,77 @@ export function ConfigScreen() {
       setConfig(selectedTopic, selectedSubtopic, duration, level)
       navigate('/interview')
     }
-  }, [countdown, selectedTopic, selectedSubtopic, duration, level])
+  }, [countdown, selectedTopic, selectedSubtopic, duration, level, micTestStatus])
 
   const handleMouseEnter = () => {
     if (!selectedTopic || !selectedSubtopic || countdown !== null || preloading || preloadedDataRef.current) return
+    if (micTestStatus !== 'success') return
     setPreloading(true)
     startPreload()
+  }
+
+  const testMicrophone = async () => {
+    setMicTestStatus('testing')
+    preloadedDataRef.current = null
+
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    
+    if (!SpeechRecognitionClass) {
+      setMicTestStatus('failed')
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognitionClass()
+      recognitionRef.current = recognition
+      recognition.continuous = false
+      recognition.interimResults = false
+      recognition.lang = 'en-US'
+
+      recognition.onresult = () => {
+        console.log('[Config] Speech recognized, now starting interview preload')
+        setMicTestStatus('success')
+        recognition.stop()
+        
+        setTimeout(() => {
+          setPreloading(true)
+          startPreload()
+        }, 300)
+      }
+
+      recognition.onerror = () => {
+        console.log('[Config] Speech recognition error, will retry')
+      }
+
+      recognition.onend = () => {
+        if (micTestStatus === 'testing') {
+          console.log('[Config] Recognition ended without result, starting preload anyway')
+          setMicTestStatus('success')
+          setTimeout(() => {
+            setPreloading(true)
+            startPreload()
+          }, 300)
+        }
+      }
+
+      recognition.start()
+      
+      setTimeout(() => {
+        if (micTestStatus === 'testing') {
+          console.log('[Config] Recognition timeout, starting preload anyway')
+          setMicTestStatus('success')
+          recognition.stop()
+          setTimeout(() => {
+            setPreloading(true)
+            startPreload()
+          }, 300)
+        }
+      }, 3000)
+
+    } catch (error) {
+      console.error('[Config] Microphone test error:', error)
+      setMicTestStatus('failed')
+    }
   }
 
   const startPreload = () => {
@@ -122,9 +191,15 @@ export function ConfigScreen() {
 
   const handleStart = () => {
     if (selectedTopic && selectedSubtopic) {
-      preloadedDataRef.current = null
-      setPreloading(false)
-      setCountdown(3)
+      if (micTestStatus !== 'success' && micTestStatus !== 'testing') {
+        testMicrophone()
+        return
+      }
+      if (micTestStatus === 'success' && preloadedDataRef.current) {
+        preloadedDataRef.current = null
+        setPreloading(false)
+        setCountdown(3)
+      }
     }
   }
 
@@ -257,6 +332,65 @@ export function ConfigScreen() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-zinc-300">Microphone Test</Label>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={testMicrophone}
+                    disabled={micTestStatus === 'testing' || !selectedTopic || !selectedSubtopic}
+                    className={`flex-1 ${
+                      micTestStatus === 'success' ? 'border-green-500 bg-green-500/20' : 
+                      micTestStatus === 'failed' ? 'border-red-500 bg-red-500/20' : ''
+                    }`}
+                  >
+                    {micTestStatus === 'idle' && (
+                      <>
+                        <Mic className="w-4 h-4 mr-2" />
+                        Test Microphone
+                      </>
+                    )}
+                    {micTestStatus === 'testing' && (
+                      <>
+                        <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                        Testing...
+                      </>
+                    )}
+                    {micTestStatus === 'success' && (
+                      <>
+                        <Check className="w-4 h-4 mr-2 text-green-500" />
+                        Ready
+                      </>
+                    )}
+                    {micTestStatus === 'failed' && (
+                      <>
+                        <MicOff className="w-4 h-4 mr-2 text-red-500" />
+                        Failed - Click to Retry
+                      </>
+                    )}
+                  </Button>
+                  {micTestStatus === 'failed' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setMicTestStatus('idle')
+                        preloadedDataRef.current = null
+                      }}
+                    >
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      Use Manual Mode
+                    </Button>
+                  )}
+                </div>
+                {micTestStatus === 'idle' && (
+                  <p className="text-zinc-500 text-xs">Click to test microphone and preload interview</p>
+                )}
+                {micTestStatus === 'success' && preloading && (
+                  <p className="text-green-400 text-xs animate-pulse">Interview preloaded! Click Start to begin</p>
+                )}
+              </div>
             </>
           )}
         </CardContent>
@@ -271,13 +405,15 @@ export function ConfigScreen() {
             </Button>
           ) : (
             <Button
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={!selectedTopic || !selectedSubtopic}
+              className={`w-full ${
+                micTestStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+              disabled={!selectedTopic || !selectedSubtopic || (micTestStatus === 'testing')}
               onClick={handleStart}
               onMouseEnter={handleMouseEnter}
             >
               <Play className="w-4 h-4 mr-2" />
-              Start Interview
+              {micTestStatus === 'success' ? 'Start Interview' : 'Test Microphone & Start'}
             </Button>
           )}
         </CardFooter>
