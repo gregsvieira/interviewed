@@ -37,21 +37,21 @@ declare global {
 }
 
 export class WebSpeechSTT implements STTService {
-  private recognition: SpeechRecognitionType['prototype'] | null = null;
+  private recognition: any = null;
   private resultCallback?: (text: string) => void;
   private interimCallback?: (text: string) => void;
   private speakingCallback?: (speaking: boolean) => void;
   private speechStarted = false;
 
   constructor() {
-    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognitionClass) {
       const recognition = new SpeechRecognitionClass();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: any) => {
         let finalTranscript = '';
         let latestInterim = '';
 
@@ -84,8 +84,8 @@ export class WebSpeechSTT implements STTService {
         this.speakingCallback?.(false);
       };
 
-      recognition.onerror = (event) => {
-        console.log('[STT] Error:', event);
+      recognition.onerror = (event: any) => {
+        console.log('[STT] Error:', event.error);
         this.speechStarted = false;
         this.speakingCallback?.(false);
       };
@@ -97,12 +97,22 @@ export class WebSpeechSTT implements STTService {
   async start(): Promise<void> {
     if (this.recognition) {
       this.speechStarted = false;
-      this.recognition.start();
+      try {
+        this.recognition.start();
+      } catch (err) {
+        console.log('[STT] Start error (might already be running):', err);
+      }
     }
   }
 
   stop(): void {
-    this.recognition?.stop();
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch (err) {
+        console.log('[STT] Stop error (might already be stopped):', err);
+      }
+    }
     this.speechStarted = false;
     this.speakingCallback?.(false);
   }
@@ -120,6 +130,6 @@ export class WebSpeechSTT implements STTService {
   }
 
   isSupported(): boolean {
-    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   }
 }

@@ -192,6 +192,18 @@ export function InterviewRoom() {
     setManualText('')
 
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      console.log('[InterviewRoom] Microphone permission granted');
+    } catch (err) {
+      console.error('[InterviewRoom] Microphone permission denied:', err);
+      setSttError('Microphone permission denied. Please allow microphone access and try again.')
+      setUserSpeaking(false)
+      setIsRecording(false)
+      return
+    }
+
+    try {
       await sttService.start()
       console.log('[InterviewRoom] STT started');
     } catch (err) {
