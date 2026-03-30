@@ -1,9 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { io, Socket } from 'socket.io-client'
-import { Play, Mic, MicOff, Check, AlertCircle } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -12,12 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useInterviewStore, LevelOption } from '@/stores/interview.store'
-import { interviewApi } from '@/services/api/interview.api'
-import { Topic, Subtopic } from '@/types/interview'
-import { Gender } from '@/types/audio'
 import { INTERVIEW_DURATIONS } from '@/lib/constants'
 import { WS_URL } from '@/lib/utils'
+import { interviewApi } from '@/services/api/interview.api'
+import { LevelOption, useInterviewStore } from '@/stores/interview.store'
+import { Gender } from '@/types/audio'
+import { Subtopic, Topic } from '@/types/interview'
+import { AlertCircle, Check, Mic, MicOff, Play } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { io, Socket } from 'socket.io-client'
 
 const LEVEL_OPTIONS: { value: LevelOption; label: string }[] = [
   { value: 'entry', label: 'Entry Level' },
@@ -41,6 +41,7 @@ export function ConfigScreen() {
   const navigate = useNavigate()
   const { setConfig, setPreloadedMessage } = useInterviewStore()
   const recognitionRef = useRef<any>(null)
+  const micStatusRef = useRef<MicTestStatus>('idle');
 
   useEffect(() => {
     interviewApi.getTopics().then(setTopics).catch(() => {
@@ -90,69 +91,90 @@ export function ConfigScreen() {
     startPreload()
   }
 
-  const testMicrophone = async () => {
-    setMicTestStatus('testing')
-    preloadedDataRef.current = null
 
-    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    
-    if (!SpeechRecognitionClass) {
-      setMicTestStatus('failed')
-      return
-    }
+const testMicrophone = async () => {
+  setMicTestStatus('testing');
+  micStatusRef.current = 'testing'; 
 
-    try {
-      const recognition = new SpeechRecognitionClass()
-      recognitionRef.current = recognition
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.lang = 'en-US'
-
-      recognition.onresult = () => {
-        console.log('[Config] Speech recognized, now starting interview preload')
-        setMicTestStatus('success')
-        recognition.stop()
-        
-        setTimeout(() => {
-          setPreloading(true)
-          startPreload()
-        }, 300)
-      }
-
-      recognition.onerror = () => {
-        console.log('[Config] Speech recognition error, will retry')
-      }
-
-      recognition.onend = () => {
-        if (micTestStatus === 'testing') {
-          console.log('[Config] Recognition ended without result, starting preload anyway')
-          setMicTestStatus('success')
-          setTimeout(() => {
-            setPreloading(true)
-            startPreload()
-          }, 300)
-        }
-      }
-
-      recognition.start()
-      
-      setTimeout(() => {
-        if (micTestStatus === 'testing') {
-          console.log('[Config] Recognition timeout, starting preload anyway')
-          setMicTestStatus('success')
-          recognition.stop()
-          setTimeout(() => {
-            setPreloading(true)
-            startPreload()
-          }, 300)
-        }
-      }, 3000)
-
-    } catch (error) {
-      console.error('[Config] Microphone test error:', error)
-      setMicTestStatus('failed')
-    }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+    console.log('[Config] Microphone permission granted');
+  } catch (err) {
+    console.error('[Config] Microphone permission denied:', err);
+    setMicTestStatus('failed');
+    micStatusRef.current = 'failed';
+    return;
   }
+
+  const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  
+  if (!SpeechRecognitionClass) {
+    console.log('[Config] Speech Recognition not supported, proceeding anyway');
+    micStatusRef.current = 'success';
+    setMicTestStatus('success');
+    setPreloading(true);
+    startPreload();
+    return;
+  }
+
+  try {
+    const recognition = new SpeechRecognitionClass();
+    recognitionRef.current = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      console.log('[Config] Speech recognition result:', event);
+      if (micStatusRef.current === 'testing') {
+        micStatusRef.current = 'success';
+        setMicTestStatus('success');
+        recognition.stop();
+        setTimeout(() => {
+          setPreloading(true);
+          startPreload();
+        }, 100);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.log('[Config] Speech recognition error:', event.error);
+    };
+
+    recognition.onend = () => {
+      console.log('[Config] Speech recognition ended, status:', micStatusRef.current);
+      if (micStatusRef.current === 'testing') {
+        micStatusRef.current = 'success';
+        setMicTestStatus('success');
+        setPreloading(true);
+        startPreload();
+      }
+    };
+
+    console.log('[Config] Starting speech recognition...');
+    recognition.start();
+
+    setTimeout(() => {
+      console.log('[Config] Timeout reached, status:', micStatusRef.current);
+      if (micStatusRef.current === 'testing') {
+        micStatusRef.current = 'success';
+        setMicTestStatus('success');
+        try { recognition.stop(); } catch {}
+        setPreloading(true);
+        startPreload();
+      }
+    }, 3000);
+
+  } catch (error) {
+    console.error('[Config] Speech recognition error:', error);
+    micStatusRef.current = 'success';
+    setMicTestStatus('success');
+    setPreloading(true);
+    startPreload();
+  }
+}
+
 
   const startPreload = () => {
     const token = localStorage.getItem('token')
@@ -385,10 +407,7 @@ export function ConfigScreen() {
                   )}
                 </div>
                 {micTestStatus === 'idle' && (
-                  <p className="text-zinc-500 text-xs">Click to test microphone and preload interview</p>
-                )}
-                {micTestStatus === 'success' && preloading && (
-                  <p className="text-green-400 text-xs animate-pulse">Interview preloaded! Click Start to begin</p>
+                  <p className="text-zinc-500 text-xs">Click to test microphone</p>
                 )}
               </div>
             </>
@@ -408,12 +427,12 @@ export function ConfigScreen() {
               className={`w-full ${
                 micTestStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
               }`}
-              disabled={!selectedTopic || !selectedSubtopic || (micTestStatus === 'testing')}
+              disabled={!selectedTopic || !selectedSubtopic || (micTestStatus !== 'success' && micTestStatus !== 'idle')}
               onClick={handleStart}
               onMouseEnter={handleMouseEnter}
             >
               <Play className="w-4 h-4 mr-2" />
-              {micTestStatus === 'success' ? 'Start Interview' : 'Test Microphone & Start'}
+              Start Interview
             </Button>
           )}
         </CardFooter>
