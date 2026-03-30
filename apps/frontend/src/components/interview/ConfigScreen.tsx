@@ -93,6 +93,8 @@ export function ConfigScreen() {
 
 
 const testMicrophone = async () => {
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
   setMicTestStatus('testing');
   micStatusRef.current = 'testing'; 
 
@@ -109,7 +111,7 @@ const testMicrophone = async () => {
 
   const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   
-  if (!SpeechRecognitionClass) {
+  if (!SpeechRecognitionClass || isSafari) {
     console.log('[Config] Speech Recognition not supported, proceeding anyway');
     micStatusRef.current = 'success';
     setMicTestStatus('success');
@@ -407,7 +409,7 @@ const testMicrophone = async () => {
                   )}
                 </div>
                 {micTestStatus === 'idle' && (
-                  <p className="text-zinc-500 text-xs">Click to test microphone</p>
+                  <p className="text-center text-zinc-500 text-xs">Click to test microphone</p>
                 )}
               </div>
             </>
@@ -427,9 +429,9 @@ const testMicrophone = async () => {
               className={`w-full ${
                 micTestStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
               }`}
-              disabled={!selectedTopic || !selectedSubtopic || (micTestStatus !== 'success' && micTestStatus !== 'idle')}
+              disabled={!selectedTopic || !selectedSubtopic || (micTestStatus !== 'success')}
               onClick={handleStart}
-              onMouseEnter={handleMouseEnter}
+              onMouseEnter={handleMouseEnter} 
             >
               <Play className="w-4 h-4 mr-2" />
               Start Interview
