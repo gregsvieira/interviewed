@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Node modules (serão reconstruídos no container)
+**/node_modules
+
+# Build outputs (serão reconstruídos no container)
+**/dist
+**/build
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+**/*.log
+npm-debug.log*
+
+# Environment (não expor segredos)
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Documentation
+README.md
+*.md
+
+# Testes
+**/coverage
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+
+# Misc
+*.bak
+*.tmp

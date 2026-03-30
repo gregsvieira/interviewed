@@ -1,0 +1,72 @@
+services:
+  # ============================================
+  # BACKEND - NestJS API (CPU)
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile.cpu
+    container_name: interviewed-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:- interviewed-super-secret-jwt-key-change-in-production}
+      - JWT_EXPIRES_IN=7d
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5-coder
+      - HOME=/home/node
+    volumes:
+      - interviewed-data:/home/node/.interviewed
+    networks:
+      - interviewed-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # FRONTEND - React + Vite + Nginx
+  # ============================================
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: interviewed-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - interviewed-network
+
+  # ============================================
+  # OLLAMA - Modelo de IA Local (CPU)
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: interviewed-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - interviewed-network
+    # CPU only - mais lento mas não requer GPU
+
+networks:
+  interviewed-network:
+    driver: bridge
+
+volumes:
+  interviewed-data:
+    driver: local
+  ollama-data:
+    driver: local
