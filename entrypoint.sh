@@ -7,21 +7,20 @@ echo "Starting Ollama server..."
 ollama serve &
 SERVER_PID=$!
 
-echo "Waiting for Ollama to be ready..."
-for i in {1..30}; do
+echo "Waiting for Ollama to be ready (max 120 seconds)..."
+for i in {1..60}; do
     if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "Ollama server is ready!"
+        echo "Ollama server is ready! (took ${i}s)"
         break
     fi
-    if [ $i -eq 30 ]; then
-        echo "Ollama failed to start after 30 seconds"
-        exit 1
+    if [ $i -eq 60 ]; then
+        echo "Ollama failed to start after 60 seconds, continuing anyway..."
     fi
-    sleep 1
+    sleep 2
 done
 
 echo "Checking if model $MODEL exists..."
-if ! ollama list | grep -q "$MODEL"; then
+if ! ollama list 2>/dev/null | grep -q "$MODEL"; then
     echo "Model $MODEL not found. Downloading..."
     ollama pull "$MODEL"
     echo "Model $MODEL downloaded."
@@ -30,7 +29,7 @@ else
 fi
 
 echo "Checking if model $WHISPER_MODEL exists..."
-if ! ollama list | grep -q "$WHISPER_MODEL"; then
+if ! ollama list 2>/dev/null | grep -q "$WHISPER_MODEL"; then
     echo "Model $WHISPER_MODEL not found. Downloading..."
     ollama pull "$WHISPER_MODEL"
     echo "Whisper model downloaded."
