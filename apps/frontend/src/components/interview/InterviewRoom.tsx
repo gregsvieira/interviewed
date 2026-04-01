@@ -52,15 +52,15 @@ export function InterviewRoom() {
           level: selectedLevel,
           duration: 30,
           candidateName: user?.name || 'Candidate',
-        }, (response: { interviewId?: string }) => {
-          if (response?.interviewId) {
-            console.log('[InterviewRoom] Got interviewId:', response.interviewId);
-            setInterviewId(response.interviewId);
-          }
         })
         startInterview()
         setInterviewStarted(true)
       }
+    })
+
+    newSocket.on('interview:started', (data: { interviewId: string; candidateName: string; interviewerName: string; interviewerGender: string }) => {
+      console.log('[InterviewRoom] Got interviewId:', data.interviewId);
+      setInterviewId(data.interviewId);
     })
 
     newSocket.on('connect_error', (err) => {

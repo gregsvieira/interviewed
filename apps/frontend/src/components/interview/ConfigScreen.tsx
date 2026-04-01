@@ -232,7 +232,7 @@ const testMicrophone = async () => {
         }
         preloadedDataRef.current = null
         setPreloading(false)
-        setCountdown(3)
+        setCountdown(5)
       }
     }
   }
