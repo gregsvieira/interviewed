@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MODEL="${OLLAMA_MODEL:-qwen2.5-coder}"
-WHISPER_MODEL="whisper-small"
+WHISPER_MODEL="karanchopda333/whisper"
 
 echo "Starting Ollama server..."
 ollama serve &

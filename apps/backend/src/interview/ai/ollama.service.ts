@@ -62,7 +62,7 @@ export class OllamaService {
       const fileContent = fs.readFileSync(tempFilePath);
       const file = new File([fileContent], 'audio.webm', { type: 'audio/webm' });
       formData.append('file', file);
-      formData.append('model', 'whisper');
+      formData.append('model', 'karanchopda333/whisper');
 
       console.log('[OllamaService] Sending request to Ollama...');
       
