@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { WS_URL } from '@/lib/utils'
 import { MediaRecorderService } from '@/services/audio/mediaRecorder.stt'
+import { WebSpeechSTT } from '@/services/audio/webSpeech.stt'
 import { WebSpeechTTS } from '@/services/audio/webSpeech.tts'
 import { useAuthStore } from '@/stores/auth.store'
 import { useInterviewStore } from '@/stores/interview.store'
@@ -9,6 +10,7 @@ import { ChevronDown, ChevronUp, Clock, Square } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { io, Socket } from 'socket.io-client'
 import { ConversationLog } from './ConversationLog'
+import { LiveTranscript } from './LiveTranscript'
 import { SpeakingCircle } from './SpeakingCircle'
 
 export function InterviewRoom() {
@@ -19,9 +21,12 @@ export function InterviewRoom() {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const [sttService] = useState(() => new MediaRecorderService())
+  const [webSpeechService] = useState(() => new WebSpeechSTT())
   const [ttsService] = useState(() => new WebSpeechTTS())
   const [typingMessage, setTypingMessage] = useState<{ role: 'ai' | 'user'; text: string } | null>(null)
   const [userSpeakingText, setUserSpeakingText] = useState('')
+  const [userLiveText, setUserLiveText] = useState('')
+  const [liveTranscriptActive, setLiveTranscriptActive] = useState(false)
   const [showConversation, setShowConversation] = useState(true)
   const [interviewStarted, setInterviewStarted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
@@ -45,7 +50,9 @@ export function InterviewRoom() {
     })
 
     newSocket.on('connect', () => {
-      if (!interviewStarted && !preloadedMessage) {
+      console.log('[InterviewRoom] Socket connected, interviewStarted:', interviewStarted, 'preloadedMessage:', !!preloadedMessage);
+      if (!interviewStarted) {
+        console.log('[InterviewRoom] Emitting start event...');
         newSocket.emit('start', {
           topic: selectedTopic?.name,
           subtopic: selectedSubtopic?.name,
@@ -55,6 +62,8 @@ export function InterviewRoom() {
         })
         startInterview()
         setInterviewStarted(true)
+      } else {
+        console.log('[InterviewRoom] Interview already started, skipping start');
       }
     })
 
@@ -212,8 +221,30 @@ export function InterviewRoom() {
     setSttError(null)
     accumulatedTextRef.current = ''
     setUserSpeakingText('')
+    setUserLiveText('')
     setIsRecording(true)
     setManualText('')
+
+    if (webSpeechService.isSupported()) {
+      webSpeechService.onInterimResult((text) => {
+        setUserLiveText(text)
+        setLiveTranscriptActive(true)
+      })
+      webSpeechService.onResult((_text) => {
+        setUserLiveText('')
+        setLiveTranscriptActive(false)
+      })
+      webSpeechService.onSpeakingChange((speaking) => {
+        if (!speaking) {
+          setLiveTranscriptActive(false)
+        }
+      })
+      try {
+        await webSpeechService.start()
+      } catch (e) {
+        console.log('[InterviewRoom] WebSpeechSTT failed to start:', e)
+      }
+    }
 
     if (!sttService.isSupported()) {
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
@@ -294,8 +325,11 @@ export function InterviewRoom() {
       silenceTimeoutRef.current = null
     }
     sttService.stop()
+    webSpeechService.stop()
     setUserSpeaking(false)
     setUserSpeakingText('')
+    setUserLiveText('')
+    setLiveTranscriptActive(false)
     setIsRecording(false)
 
     console.log('[InterviewRoom] Requesting server transcription')
@@ -389,8 +423,12 @@ export function InterviewRoom() {
 
         {showConversation && (
           <div className="h-40 overflow-y-auto">
-            <ConversationLog messages={conversationLog} typingMessage={typingMessage} />
+            <ConversationLog messages={conversationLog} typingMessage={typingMessage} userLiveText={userLiveText} />
           </div>
+        )}
+        
+        {(userLiveText || liveTranscriptActive) && (
+          <LiveTranscript text={userLiveText} isActive={liveTranscriptActive} />
         )}
       </div>
 

@@ -101,14 +101,9 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
         data.candidateName,
       );
 
-      console.log('First message generated:', firstMessage.substring(0, 100));
-      console.log('Emitting interview:started with interviewId:', interviewId);
       client.emit('interview:started', { interviewId, candidateName, interviewerName: interviewer.name, interviewerGender: interviewer.gender });
-      console.log('Emitting ai:text...');
       client.emit('ai:text', { text: firstMessage, candidateName, interviewerName: interviewer.name, interviewerGender: interviewer.gender });
-      console.log('Emitting ai:speaking...');
       client.emit('ai:speaking', true);
-      console.log('All events emitted successfully');
 
       return { interviewId, candidateName, interviewerName: interviewer.name, interviewerGender: interviewer.gender };
     } catch (error) {
@@ -175,16 +170,12 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { interviewId: string; audio: any },
   ) {
-    console.log('[Audio] Received audio:chunk for interview:', data.interviewId);
-    
     const interviewData = this.activeInterviews.get(data.interviewId);
     if (!interviewData) {
-      console.log('[Audio] No active interview found for:', data.interviewId);
       return { error: 'No active interview' };
     }
 
     if (interviewData.socketId !== client.id) {
-      console.log('[Audio] Socket mismatch for interview:', data.interviewId, 'expected:', interviewData.socketId, 'got:', client.id);
       return { error: 'Socket mismatch' };
     }
     
@@ -199,12 +190,9 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     } else if (typeof data.audio === 'string') {
       audioBuffer = Buffer.from(data.audio, 'base64');
     } else {
-      console.error('[Audio] Unknown audio data format:', typeof data.audio);
       return { error: 'Unknown audio format' };
     }
 
-    console.log('[Audio] Processed audio chunk:', audioBuffer.length, 'bytes');
-    
     interviewData.audioChunks.push(audioBuffer);
 
     return { received: true, chunks: interviewData.audioChunks.length };
@@ -215,37 +203,27 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { interviewId: string },
   ) {
-    console.log('Transcribe request received for interview:', data.interviewId);
-    
     const interviewData = this.activeInterviews.get(data.interviewId);
     if (!interviewData) {
-      console.log('No active interview found for transcription:', data.interviewId);
       return { error: 'No active interview' };
     }
 
     if (interviewData.socketId !== client.id) {
-      console.log('Socket mismatch for transcription:', data.interviewId);
       return { error: 'Socket mismatch' };
     }
 
     const interviewId = data.interviewId;
     
     if (interviewData.audioChunks.length === 0) {
-      console.log('No audio chunks to transcribe');
       return { text: '' };
     }
 
     try {
-      console.log('Processing', interviewData.audioChunks.length, 'audio chunks');
-      
       const combinedAudio = Buffer.concat(interviewData.audioChunks);
-      console.log('Combined audio size:', combinedAudio.length, 'bytes');
-      
       const text = await this.interviewService.transcribeAudio(combinedAudio);
       
       interviewData.audioChunks = [];
       
-      console.log('Transcription result:', text?.substring(0, 100));
       client.emit('stt:result', { text });
 
       return { text };

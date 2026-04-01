@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 interface ConversationLogProps {
   messages: Message[]
   typingMessage?: { role: 'ai' | 'user'; text: string } | null
+  userLiveText?: string
 }
 
-export function ConversationLog({ messages, typingMessage }: ConversationLogProps) {
+export function ConversationLog({ messages, typingMessage, userLiveText }: ConversationLogProps) {
   const [displayedText, setDisplayedText] = useState('')
 
   useEffect(() => {
@@ -75,6 +76,19 @@ export function ConversationLog({ messages, typingMessage }: ConversationLogProp
               </div>
               <div className="max-w-[85%] rounded-2xl px-5 py-4 text-base leading-relaxed bg-zinc-800 text-zinc-200 rounded-tl-sm">
                 {displayedText}
+                <span className="animate-pulse">|</span>
+              </div>
+            </div>
+          )}
+
+          {userLiveText && (
+            <div className="flex flex-col items-end">
+              <div className="flex items-center gap-2 mb-2 flex-row-reverse">
+                <span className="text-xs font-medium text-zinc-400">You</span>
+                <div className="w-6 h-6 rounded-full bg-zinc-600 flex items-center justify-center text-white text-xs font-bold">V</div>
+              </div>
+              <div className="max-w-[85%] rounded-2xl px-5 py-4 text-base leading-relaxed bg-blue-600 text-white rounded-tr-sm">
+                {userLiveText}
                 <span className="animate-pulse">|</span>
               </div>
             </div>
