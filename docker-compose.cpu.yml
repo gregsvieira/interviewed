@@ -51,7 +51,7 @@ services:
   # ============================================
   ollama:
     image: ollama/ollama:latest
-    command: sh -c "ollama pull qwen2.5-coder && ollama serve"
+    entrypoint: /bin/sh -c "ollama pull qwen2.5-coder && exec /bin/ollama serve"
     container_name: interviewed-ollama
     restart: unless-stopped
     ports:
