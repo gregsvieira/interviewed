@@ -1,7 +1,6 @@
 #!/bin/bash
 
 MODEL="${OLLAMA_MODEL:-qwen2.5-coder}"
-WHISPER_MODEL="karanchopda333/whisper"
 
 echo "Starting Ollama server..."
 ollama serve &
@@ -26,15 +25,6 @@ if ! ollama list 2>/dev/null | grep -q "$MODEL"; then
     echo "Model $MODEL downloaded."
 else
     echo "Model $MODEL already exists."
-fi
-
-echo "Checking if model $WHISPER_MODEL exists..."
-if ! ollama list 2>/dev/null | grep -q "$WHISPER_MODEL"; then
-    echo "Model $WHISPER_MODEL not found. Downloading..."
-    ollama pull "$WHISPER_MODEL"
-    echo "Whisper model downloaded."
-else
-    echo "Whisper model $WHISPER_MODEL already exists."
 fi
 
 echo "All models ready. Keeping Ollama server running..."

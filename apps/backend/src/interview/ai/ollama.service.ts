@@ -3,7 +3,6 @@ import axios from 'axios';
 import { config } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FormData } from 'formdata-node';
 
 export interface OllamaResponse {
   response: string;
@@ -14,10 +13,12 @@ export interface OllamaResponse {
 export class OllamaService {
   private baseUrl: string;
   private model: string;
+  private sttServiceUrl: string;
 
   constructor() {
     this.baseUrl = config.OLLAMA_BASE_URL;
     this.model = config.OLLAMA_MODEL;
+    this.sttServiceUrl = config.STT_SERVICE_URL;
   }
 
   async generate(prompt: string, context?: number[]): Promise<OllamaResponse> {
@@ -50,40 +51,26 @@ export class OllamaService {
   }
 
   async transcribe(audioBuffer: Buffer): Promise<string> {
-    console.log('[OllamaService] Starting transcription, audio size:', audioBuffer.length, 'bytes');
-    
-    const tempFilePath = path.join('/tmp', `audio_${Date.now()}.webm`);
+    console.log('[OllamaService] Starting transcription via faster-whisper service, audio size:', audioBuffer.length, 'bytes');
     
     try {
-      fs.writeFileSync(tempFilePath, audioBuffer);
-      console.log('[OllamaService] Written temp file:', tempFilePath);
-
-      const formData = new FormData();
-      const fileContent = fs.readFileSync(tempFilePath);
-      const file = new File([fileContent], 'audio.webm', { type: 'audio/webm' });
-      formData.append('file', file);
-      formData.append('model', 'karanchopda333/whisper');
-
-      console.log('[OllamaService] Sending request to Ollama...');
+      console.log('[OllamaService] Sending request to STT service:', this.sttServiceUrl);
       
-      const response = await axios.post(`${this.baseUrl}/api/audio`, formData, {
+      const response = await axios.post(`${this.sttServiceUrl}/transcribe`, audioBuffer, {
         timeout: 120000,
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
+        headers: {
+          'Content-Type': 'audio/webm',
+        },
       });
 
       console.log('[OllamaService] Transcription response:', response.data);
       
-      fs.unlinkSync(tempFilePath);
-
       return response.data?.text || '';
     } catch (error) {
       console.error('[OllamaService] Transcription error:', error);
       
-      try {
-        fs.unlinkSync(tempFilePath);
-      } catch {}
-
       if (axios.isAxiosError(error)) {
         console.error('[OllamaService] Axios error details:', error.response?.data);
       }

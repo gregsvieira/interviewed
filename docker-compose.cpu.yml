@@ -17,6 +17,7 @@ services:
       - JWT_EXPIRES_IN=7d
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5-coder
+      - STT_SERVICE_URL=http://stt-service:8001
       - HOME=/home/node
     volumes:
       - interviewed-data:/home/node/.interviewed
@@ -45,6 +46,28 @@ services:
         condition: service_healthy
     networks:
       - interviewed-network
+
+  # ============================================
+  # STT - Faster Whisper Service (CPU)
+  # ============================================
+  stt-service:
+    build:
+      context: ./apps/stt-service
+      dockerfile: Dockerfile
+    container_name: interviewed-stt
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - MODEL_SIZE=base
+      - COMPUTE_TYPE=int8
+    networks:
+      - interviewed-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   # ============================================
   # OLLAMA - Modelo de IA Local (CPU)

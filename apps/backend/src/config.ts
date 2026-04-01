@@ -9,6 +9,7 @@ interface Config {
   OLLAMA_BASE_URL: string;
   OLLAMA_MODEL: string;
   STORAGE_PATH: string;
+  STT_SERVICE_URL: string;
 }
 
 let config: Config;
@@ -26,6 +27,7 @@ try {
       OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
       OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'qwen2.5-coder',
       STORAGE_PATH: process.env.STORAGE_PATH || '~/.interviewed',
+      STT_SERVICE_URL: process.env.STT_SERVICE_URL || 'http://localhost:8001',
     };
   }
 } catch {
@@ -36,6 +38,7 @@ try {
     OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'qwen2.5-coder',
     STORAGE_PATH: process.env.STORAGE_PATH || '~/.interviewed',
+    STT_SERVICE_URL: process.env.STT_SERVICE_URL || 'http://localhost:8001',
   };
 }
 
