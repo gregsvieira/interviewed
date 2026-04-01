@@ -51,16 +51,16 @@ services:
   # ============================================
   ollama:
     image: ollama/ollama:latest
-    entrypoint: ["/bin/sh", "-c", "if ! ollama list | grep -q qwen2.5-coder; then echo 'Downloading model...' && ollama pull qwen2.5-coder; fi && exec ollama serve"]
     container_name: interviewed-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
+      - ./entrypoint.sh:/entrypoint.sh
       - ollama-data:/root/.ollama
     networks:
       - interviewed-network
-    # CPU only - mais lento mas não requer GPU
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
 
 networks:
   interviewed-network:
