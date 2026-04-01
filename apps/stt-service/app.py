@@ -6,22 +6,36 @@ import wave
 import struct
 import numpy as np
 import logging
+from threading import Lock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
 
 MODEL_SIZE = os.environ.get('MODEL_SIZE', 'base')
 COMPUTE_TYPE = os.environ.get('COMPUTE_TYPE', 'int8')
 
 model = None
+model_lock = Lock()
 
 def load_model():
     global model
-    logger.info(f"Loading Whisper model: {MODEL_SIZE} ({COMPUTE_TYPE})")
-    model = WhisperModel(MODEL_SIZE, device="cpu", compute_type=COMPUTE_TYPE)
-    logger.info("Model loaded successfully")
+    if model is None:
+        with model_lock:
+            if model is None:
+                logger.info(f"Loading Whisper model: {MODEL_SIZE} ({COMPUTE_TYPE})...")
+                model = WhisperModel(MODEL_SIZE, device="cpu", compute_type=COMPUTE_TYPE)
+                logger.info("Model loaded successfully")
+    return model
+
+def get_model():
+    if model is None:
+        load_model()
+    return model
+
+app = Flask(__name__)
+
+with app.app_context():
+    load_model()
 
 def convert_to_wav(audio_data: bytes, original_format: str = 'webm') -> bytes:
     with tempfile.NamedTemporaryFile(suffix=f'.{original_format}', delete=False) as input_file:
@@ -44,12 +58,13 @@ def convert_to_wav(audio_data: bytes, original_format: str = 'webm') -> bytes:
             os.unlink(output_path)
 
 def transcribe_audio(audio_data: bytes) -> str:
+    whisper_model = get_model()
     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
         f.write(audio_data)
         temp_path = f.name
     
     try:
-        segments, info = model.transcribe(temp_path, beam_size=5, language='en')
+        segments, info = whisper_model.transcribe(temp_path, beam_size=5, language='en')
         
         transcription = ' '.join([segment.text for segment in segments])
         return transcription.strip()
@@ -58,7 +73,11 @@ def transcribe_audio(audio_data: bytes) -> str:
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'healthy', 'model': MODEL_SIZE})
+    return jsonify({
+        'status': 'healthy', 
+        'model': MODEL_SIZE,
+        'model_loaded': model is not None
+    })
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe():

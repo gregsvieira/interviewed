@@ -1,11 +1,11 @@
 services:
   # ============================================
-  # BACKEND - NestJS API (CPU)
+  # BACKEND - NestJS API
   # ============================================
   backend:
     build:
       context: .
-      dockerfile: apps/backend/Dockerfile.cpu
+      dockerfile: apps/backend/Dockerfile
     container_name: interviewed-backend
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
       - PORT=3000
       - JWT_SECRET=${JWT_SECRET:- interviewed-super-secret-jwt-key-change-in-production}
       - JWT_EXPIRES_IN=7d
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=qwen2.5-coder
       - STT_SERVICE_URL=http://stt-service:8001
       - HOME=/home/node
@@ -48,7 +48,7 @@ services:
       - interviewed-network
 
   # ============================================
-  # STT - Faster Whisper Service (CPU)
+  # STT - Faster Whisper Service
   # ============================================
   stt-service:
     build:
@@ -70,7 +70,7 @@ services:
           memory: 2G
 
   # ============================================
-  # OLLAMA - Modelo de IA Local (CPU)
+  # OLLAMA - Modelo de IA Local
   # ============================================
   ollama:
     image: ollama/ollama:latest
@@ -83,7 +83,16 @@ services:
       - ollama-data:/root/.ollama
     networks:
       - interviewed-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 networks:
   interviewed-network:

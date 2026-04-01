@@ -90,7 +90,9 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     });
 
     try {
-      console.log('Starting interview:', { interviewId, data });
+      console.log('[InterviewGateway] Starting interview:', { interviewId, data });
+      const startTime = Date.now();
+      
       const { firstMessage, candidateName, interviewer } = await this.interviewService.startInterview(
         interviewId,
         client.data.user.id,
@@ -100,6 +102,12 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
         data.duration || 30,
         data.candidateName,
       );
+
+      console.log('[InterviewGateway] AI response received:', { 
+        interviewId, 
+        responseLength: firstMessage.length,
+        duration: `${Date.now() - startTime}ms` 
+      });
 
       client.emit('interview:started', { interviewId, candidateName, interviewerName: interviewer.name, interviewerGender: interviewer.gender });
       client.emit('ai:text', { text: firstMessage, candidateName, interviewerName: interviewer.name, interviewerGender: interviewer.gender });

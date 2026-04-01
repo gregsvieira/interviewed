@@ -33,8 +33,16 @@ export class OllamaService {
     }
 
     try {
+      console.log('[OllamaService] Sending request to Ollama, prompt length:', prompt.length);
+      const startTime = Date.now();
+      
       const response = await axios.post(`${this.baseUrl}/api/generate`, requestBody, {
         timeout: 120000,
+      });
+
+      console.log('[OllamaService] Response received:', { 
+        duration: `${Date.now() - startTime}ms`,
+        responseLength: response.data.response?.length || 0
       });
 
       return {
@@ -42,7 +50,7 @@ export class OllamaService {
         context: response.data.context || [],
       };
     } catch (error) {
-      console.error('Ollama error:', error);
+      console.error('[OllamaService] Ollama error:', error);
       if (axios.isAxiosError(error) && error.response) {
         throw new Error(`Ollama error: ${error.response.status} - ${error.response.statusText}`);
       }

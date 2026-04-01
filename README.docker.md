@@ -6,10 +6,10 @@
 # JWT_SECRET=sua-chave-secreta-aqui
 
 # Para iniciar (com GPU NVIDIA):
-docker compose up -d
+docker compose -f docker-compose.gpu.yml up -d
 
 # Para iniciar (sem GPU - CPU only):
-docker compose -f docker-compose.cpu.yml up -d
+docker compose up -d
 
 # Ver logs:
 docker compose logs -f

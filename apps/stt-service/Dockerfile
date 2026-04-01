@@ -17,4 +17,4 @@ ENV COMPUTE_TYPE=int8
 
 EXPOSE 8001
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8001", "--workers", "2", "--threads", "4", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8001", "--workers", "1", "--threads", "1", "--timeout", "300", "app:app"]
