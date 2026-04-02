@@ -90,7 +90,10 @@ export function InterviewRoom() {
     })
 
     newSocket.on('ai:text', (data: { text: string }) => {
-      if (!preloadedUsedRef.current) {
+      console.log('[InterviewRoom] ai:text received:', data.text?.substring(0, 50))
+      if (!preloadedUsedRef.current && preloadedMessage) {
+        setTypingMessage({ role: 'ai', text: preloadedMessage.text })
+      } else {
         setTypingMessage({ role: 'ai', text: data.text })
       }
     })
@@ -101,7 +104,7 @@ export function InterviewRoom() {
 
     newSocket.on('stt:result', (data: { text: string }) => {
       const text = data.text?.trim()
-      if (text) {
+      if (text && !webSpeechSentRef.current) {
         accumulatedTextRef.current = text
         setUserSpeakingText(text)
         addMessage({ role: 'user', text })
@@ -250,7 +253,7 @@ export function InterviewRoom() {
           if (finalText && socketRef.current?.connected && !webSpeechSentRef.current) {
             console.log('[InterviewRoom] WebSpeech final text:', finalText)
             addMessage({ role: 'user', text: finalText })
-            socketRef.current?.emit('user:text', { interviewId, text: finalText })
+            socketRef.current?.emit('user:text', { interviewId: interviewIdRef.current, text: finalText })
             webSpeechSentRef.current = true
           }
           webSpeechFinalTextRef.current = ''
@@ -258,6 +261,7 @@ export function InterviewRoom() {
       })
       try {
         await webSpeechService.start()
+        return
       } catch (e) {
         console.log('[InterviewRoom] WebSpeechSTT failed to start:', e)
       }
@@ -296,7 +300,7 @@ export function InterviewRoom() {
           
           try {
             const arrayBuffer = await chunk.arrayBuffer()
-            socketRef.current?.emit('audio:chunk', { interviewId, audio: arrayBuffer })
+            socketRef.current?.emit('audio:chunk', { interviewId: interviewIdRef.current, audio: arrayBuffer })
           } catch (err) {
             console.error('[InterviewRoom] Error converting chunk:', err)
           }
