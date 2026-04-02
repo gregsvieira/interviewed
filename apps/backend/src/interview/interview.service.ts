@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { config } from '../config';
 import { StorageService } from '../storage/storage.service';
 import { AIService } from './ai/ai.service';
-import { Message, generateRandomName, generateInterviewer, InterviewerInfo } from './ai/prompts/interview.prompt';
+import { generateInterviewer, generateRandomName, InterviewerInfo, Message } from './ai/prompts/interview.prompt';
 
 export interface InterviewMessage {
   role: 'user' | 'ai';
@@ -92,7 +92,7 @@ export class InterviewService {
     });
 
     const previousMessages: Message[] = interview.messages.map(m => ({
-      role: m.role === 'user' ? 'user' : 'assistant',
+      role: m.role === 'user' ? 'user' : 'ai',
       content: m.text,
     }));
 
