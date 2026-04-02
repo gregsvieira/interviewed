@@ -3,6 +3,7 @@ import { AuthModule } from './auth/auth.module';
 import { InterviewModule } from './interview/interview.module';
 import { StorageModule } from './storage/storage.module';
 import { TopicsModule } from './topics/topics.module';
+import { ProfileModule } from './profile/profile.module';
 import { Controller, Get } from '@nestjs/common';
 
 @Controller()
@@ -19,6 +20,7 @@ class HealthController {
     TopicsModule,
     AuthModule,
     InterviewModule,
+    ProfileModule,
   ],
   controllers: [HealthController],
 })
