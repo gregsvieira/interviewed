@@ -1,22 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { WS_URL } from '@/lib/utils'
+import { profileApi } from '@/services/api/profile.api'
 import { MediaRecorderService } from '@/services/audio/mediaRecorder.stt'
 import { WebSpeechSTT } from '@/services/audio/webSpeech.stt'
 import { WebSpeechTTS } from '@/services/audio/webSpeech.tts'
 import { useAuthStore } from '@/stores/auth.store'
 import { useInterviewStore } from '@/stores/interview.store'
 import { ChevronDown, ChevronUp, Clock, Square } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { io, Socket } from 'socket.io-client'
 import { ConversationLog } from './ConversationLog'
 import { LiveTranscript } from './LiveTranscript'
 import { SpeakingCircle } from './SpeakingCircle'
-import { profileApi } from '@/services/api/profile.api'
 
 export function InterviewRoom() {
   const navigate = useNavigate()
-  const { selectedTopic, selectedSubtopic, selectedLevel, isAiSpeaking, isUserSpeaking, conversationLog, timeRemaining, addMessage, updateMessage, setAiSpeaking, setUserSpeaking, decrementTime, startInterview, endInterview, preloadedMessage, setPreloadedMessage, interviewerGender } = useInterviewStore()
+  const { selectedTopic, selectedSubtopic, selectedLevel, isAiSpeaking, isUserSpeaking, conversationLog, timeRemaining, addMessage, updateMessage, setAiSpeaking, setUserSpeaking, decrementTime, startInterview, endInterview, preloadedMessage, setPreloadedMessage, interviewerGender, interviewerName } = useInterviewStore()
   const { token, user } = useAuthStore()
 
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -411,7 +411,7 @@ export function InterviewRoom() {
             label="You"
             isSpeaking={isUserSpeaking}
             isRecording={isRecording}
-            size="md"
+            size="lg"
             isUserCircle
             showMicButton
             onMicPress={handleMicPress}
