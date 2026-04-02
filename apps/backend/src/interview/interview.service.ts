@@ -120,8 +120,10 @@ export class InterviewService {
 
   async processUserMessage(interviewId: string, userText: string): Promise<string> {
     const interview = this.currentInterviews.get(interviewId);
+    console.log('[InterviewService] processUserMessage:', { interviewId, userText, found: !!interview, messageCount: interview?.messages?.length });
     if (!interview) throw new Error('Interview not found');
 
+    console.log('[InterviewService] Adding user message to interview');
     interview.messages.push({
       role: 'user',
       text: userText,
@@ -154,8 +156,11 @@ export class InterviewService {
 
   async endInterview(interviewId: string): Promise<void> {
     const interview = this.currentInterviews.get(interviewId);
+    console.log('[InterviewService] endInterview:', { interviewId, found: !!interview, messagesCount: interview?.messages?.length });
     if (!interview) return;
 
+    console.log('[InterviewService] Messages before save:', interview.messages.map(m => ({ role: m.role, text: m.text.substring(0, 50) })));
+    
     interview.endedAt = new Date();
     
     const startTime = new Date(interview.startedAt).getTime();
@@ -165,7 +170,9 @@ export class InterviewService {
     
     this.aiService.clearContext(interviewId);
 
+    console.log('[InterviewService] Saving interview with', interview.messages.length, 'messages');
     await this.storage.save('interviews', interviewId, interview);
+    console.log('[InterviewService] Interview saved successfully');
     this.currentInterviews.delete(interviewId);
 
     const today = new Date().toISOString().split('T')[0];

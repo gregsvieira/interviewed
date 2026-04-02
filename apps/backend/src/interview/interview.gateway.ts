@@ -126,8 +126,11 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { interviewId: string; text: string },
   ) {
+    console.log('[InterviewGateway] Received user:text:', { interviewId: data.interviewId, text: data.text?.substring(0, 50) });
     const interview = this.activeInterviews.get(data.interviewId);
+    console.log('[InterviewGateway] Active interview check:', { found: !!interview, socketMatch: interview?.socketId === client.id });
     if (!interview || interview.socketId !== client.id) {
+      console.log('[InterviewGateway] user:text rejected: Interview not found or unauthorized');
       return { error: 'Interview not found or unauthorized' };
     }
 
@@ -135,6 +138,7 @@ export class InterviewGateway implements OnGatewayConnection, OnGatewayDisconnec
     client.emit('ai:speaking', true);
 
     try {
+      console.log('[InterviewGateway] Calling processUserMessage...');
       const response = await this.interviewService.processUserMessage(
         data.interviewId,
         data.text,

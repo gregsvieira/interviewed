@@ -39,6 +39,8 @@ export function InterviewRoom() {
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const accumulatedTextRef = useRef('')
   const socketRef = useRef<Socket | null>(null)
+  const webSpeechFinalTextRef = useRef('')
+  const webSpeechSentRef = useRef(false)
 
   useEffect(() => {
     profileApi.getProfile().then((profile) => {
@@ -220,6 +222,8 @@ export function InterviewRoom() {
     console.log('[InterviewRoom] Mic pressed');
     setSttError(null)
     accumulatedTextRef.current = ''
+    webSpeechFinalTextRef.current = ''
+    webSpeechSentRef.current = false
     setUserSpeakingText('')
     setUserLiveText('')
     setIsRecording(true)
@@ -230,13 +234,22 @@ export function InterviewRoom() {
         setUserLiveText(text)
         setLiveTranscriptActive(true)
       })
-      webSpeechService.onResult((_text) => {
+      webSpeechService.onResult((text) => {
+        webSpeechFinalTextRef.current = text
         setUserLiveText('')
         setLiveTranscriptActive(false)
       })
       webSpeechService.onSpeakingChange((speaking) => {
         if (!speaking) {
           setLiveTranscriptActive(false)
+          const finalText = webSpeechFinalTextRef.current.trim()
+          if (finalText && socketRef.current?.connected && !webSpeechSentRef.current) {
+            console.log('[InterviewRoom] WebSpeech final text:', finalText)
+            addMessage({ role: 'user', text: finalText })
+            socketRef.current?.emit('user:text', { interviewId, text: finalText })
+            webSpeechSentRef.current = true
+          }
+          webSpeechFinalTextRef.current = ''
         }
       })
       try {
@@ -318,7 +331,7 @@ export function InterviewRoom() {
   }
 
   const handleMicRelease = () => {
-    console.log('[InterviewRoom] Mic released');
+    console.log('[InterviewRoom] Mic released, webSpeechSent:', webSpeechSentRef.current);
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current)
       silenceTimeoutRef.current = null
@@ -331,8 +344,13 @@ export function InterviewRoom() {
     setLiveTranscriptActive(false)
     setIsRecording(false)
 
-    console.log('[InterviewRoom] Requesting server transcription')
-    socketRef.current?.emit('audio:transcribe', { interviewId })
+    if (!webSpeechSentRef.current) {
+      console.log('[InterviewRoom] Requesting server transcription (web speech not used)')
+      socketRef.current?.emit('audio:transcribe', { interviewId })
+    } else {
+      console.log('[InterviewRoom] Skipping server transcription (web speech already sent)')
+    }
+    webSpeechSentRef.current = false
   }
 
   const handleEndInterview = () => {
