@@ -6,7 +6,7 @@ export function ConfigPage() {
   const setTitle = useHeaderStore((state) => state.setTitle)
 
   useEffect(() => {
-    setTitle("Configuration")
+    setTitle("Interview Configuration")
   }, [setTitle])
   
   return <ConfigScreen />
