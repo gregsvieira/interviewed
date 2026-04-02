@@ -12,6 +12,11 @@ export class InterviewController {
     return this.interviewService.getInterviewHistory(req.user.id);
   }
 
+  @Get('stats')
+  async getStats(@Request() req) {
+    return this.interviewService.getInterviewStats(req.user.id);
+  }
+
   @Get(':id')
   async getInterview(@Param('id') id: string) {
     return this.interviewService.getInterview(id);

@@ -3,7 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { config } from '../config';
 import { StorageService } from '../storage/storage.service';
 import { AIService } from './ai/ai.service';
+import { AuthService } from '../auth/auth.service';
 import { generateInterviewer, generateRandomName, InterviewerInfo, Message } from './ai/prompts/interview.prompt';
+import { TOPICS_DATA } from '../topics/topics.data';
 
 export interface InterviewMessage {
   role: 'user' | 'ai';
@@ -25,6 +27,40 @@ export interface Interview {
   endedAt?: Date;
 }
 
+export interface TopicDistribution {
+  id: string;
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface LevelDistribution {
+  level: string;
+  count: number;
+  percentage: number;
+}
+
+export interface SkillLevel {
+  topicId: string;
+  name: string;
+  level: number;
+}
+
+export interface InterviewStats {
+  totalInterviews: number;
+  totalTimeMinutes: number;
+  lastInterview: Interview | null;
+  topicDistribution: TopicDistribution[];
+  levelDistribution: LevelDistribution[];
+  skillLevels: SkillLevel[];
+  currentStreak: number;
+  longestStreak: number;
+  recommendation: {
+    type: 'practice' | 'level' | 'motivation';
+    message: string;
+  };
+}
+
 @Injectable()
 export class InterviewService {
   private currentInterviews: Map<string, Interview> = new Map();
@@ -33,6 +69,7 @@ export class InterviewService {
     private storage: StorageService,
     private aiService: AIService,
     private jwtService: JwtService,
+    private authService: AuthService,
   ) {}
 
   async startInterview(
@@ -124,6 +161,9 @@ export class InterviewService {
 
     await this.storage.save('interviews', interviewId, interview);
     this.currentInterviews.delete(interviewId);
+
+    const today = new Date().toISOString().split('T')[0];
+    await this.authService.updateUser(interview.userId, { lastInterviewDate: today });
   }
 
   async getInterviewHistory(userId: string): Promise<Interview[]> {
@@ -162,5 +202,212 @@ export class InterviewService {
       console.error('[InterviewService] Transcription error:', error);
       return '';
     }
+  }
+
+  async getInterviewStats(userId: string): Promise<InterviewStats> {
+    const interviews = await this.getInterviewHistory(userId);
+    const user = await this.authService.getUserById(userId);
+
+    if (interviews.length === 0) {
+      return {
+        totalInterviews: 0,
+        totalTimeMinutes: 0,
+        lastInterview: null,
+        topicDistribution: [],
+        levelDistribution: [],
+        skillLevels: [],
+        currentStreak: 0,
+        longestStreak: 0,
+        recommendation: {
+          type: 'practice',
+          message: 'Start your first interview to track your progress!',
+        },
+      };
+    }
+
+    const totalInterviews = interviews.length;
+    const totalTimeMinutes = interviews.reduce((sum, i) => sum + i.duration, 0);
+    const lastInterview = interviews[0];
+
+    const topicCounts = new Map<string, number>();
+    const levelCounts = new Map<string, number>();
+
+    for (const interview of interviews) {
+      topicCounts.set(interview.topic, (topicCounts.get(interview.topic) || 0) + 1);
+      levelCounts.set(interview.level, (levelCounts.get(interview.level) || 0) + 1);
+    }
+
+    const topicDistribution: TopicDistribution[] = Array.from(topicCounts.entries())
+      .map(([id, count]) => {
+        const topicData = TOPICS_DATA.find(t => t.id === id);
+        return {
+          id,
+          name: topicData?.name || id,
+          count,
+          percentage: Math.round((count / totalInterviews) * 100),
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    const levelDistribution: LevelDistribution[] = Array.from(levelCounts.entries())
+      .map(([level, count]) => ({
+        level,
+        count,
+        percentage: Math.round((count / totalInterviews) * 100),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const improvementTopics = user?.improvementTopics || TOPICS_DATA.map(t => t.id);
+    const skillLevels: SkillLevel[] = improvementTopics.map(topicId => {
+      const topicData = TOPICS_DATA.find(t => t.id === topicId);
+      const count = topicCounts.get(topicId) || 0;
+      const baseLevel = Math.min(100, count * 20);
+      return {
+        topicId,
+        name: topicData?.name || topicId,
+        level: baseLevel,
+      };
+    });
+
+    const { currentStreak, longestStreak } = this.calculateStreaks(interviews);
+
+    const recommendation = this.generateRecommendation(
+      interviews,
+      skillLevels,
+      currentStreak,
+      totalInterviews,
+    );
+
+    return {
+      totalInterviews,
+      totalTimeMinutes,
+      lastInterview,
+      topicDistribution,
+      levelDistribution,
+      skillLevels,
+      currentStreak,
+      longestStreak,
+      recommendation,
+    };
+  }
+
+  private calculateStreaks(interviews: Interview[]): { currentStreak: number; longestStreak: number } {
+    if (interviews.length === 0) {
+      return { currentStreak: 0, longestStreak: 0 };
+    }
+
+    const interviewDates = new Set(
+      interviews.map(i => new Date(i.startedAt).toISOString().split('T')[0])
+    );
+    const sortedDates = Array.from(interviewDates).sort().reverse();
+
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let tempStreak = 0;
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const todayStr = today.toISOString().split('T')[0];
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const hasInterviewToday = interviewDates.has(todayStr);
+    const hadInterviewYesterday = interviewDates.has(yesterdayStr);
+
+    if (hasInterviewToday || hadInterviewYesterday) {
+      let checkDate = hasInterviewToday ? today : yesterday;
+
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (interviewDates.has(dateStr)) {
+          tempStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+      currentStreak = tempStreak;
+    }
+
+    tempStreak = 1;
+    longestStreak = 1;
+
+    const sortedAsc = Array.from(interviewDates).sort();
+    for (let i = 1; i < sortedAsc.length; i++) {
+      const prevDate = new Date(sortedAsc[i - 1]);
+      const currDate = new Date(sortedAsc[i]);
+      const diffDays = Math.floor((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 1) {
+        tempStreak++;
+        longestStreak = Math.max(longestStreak, tempStreak);
+      } else {
+        tempStreak = 1;
+      }
+    }
+
+    longestStreak = Math.max(longestStreak, currentStreak);
+
+    return { currentStreak, longestStreak };
+  }
+
+  private generateRecommendation(
+    interviews: Interview[],
+    skillLevels: SkillLevel[],
+    currentStreak: number,
+    totalInterviews: number,
+  ): { type: 'practice' | 'level' | 'motivation'; message: string } {
+    const random = Math.random();
+
+    if (random < 0.33 && skillLevels.length > 0) {
+      const weakest = skillLevels.reduce((min, s) => (s.level < min.level ? s : min), skillLevels[0]);
+      return {
+        type: 'practice',
+        message: `Practice more ${weakest.name} to improve your skills!`,
+      };
+    } else if (random < 0.66) {
+      const lastInterview = interviews[0];
+      if (lastInterview) {
+        const nextLevel = this.getNextLevel(lastInterview.level);
+        return {
+          type: 'level',
+          message: `Try a ${nextLevel} difficulty level for a new challenge!`,
+        };
+      }
+    }
+
+    const lastInterviewDate = interviews[0] ? new Date(interviews[0].startedAt) : null;
+    let daysSinceLast = 0;
+
+    if (lastInterviewDate) {
+      daysSinceLast = Math.floor((Date.now() - lastInterviewDate.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    if (daysSinceLast > 3) {
+      return {
+        type: 'motivation',
+        message: `You haven't practiced in ${daysSinceLast} days. Keep your streak going!`,
+      };
+    } else if (currentStreak > 0) {
+      return {
+        type: 'motivation',
+        message: `Great job! You're on a ${currentStreak}-day streak. Keep it up!`,
+      };
+    } else {
+      return {
+        type: 'motivation',
+        message: `${totalInterviews} interviews completed. Keep practicing to improve!`,
+      };
+    }
+  }
+
+  private getNextLevel(currentLevel: string): string {
+    const levels = ['entry', 'mid', 'senior'];
+    const currentIndex = levels.indexOf(currentLevel);
+    if (currentIndex === -1 || currentIndex === levels.length - 1) {
+      return 'senior';
+    }
+    return levels[currentIndex + 1];
   }
 }
