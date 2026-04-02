@@ -1,5 +1,5 @@
-import { Mic, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Mic, Square } from 'lucide-react'
 
 interface SpeakingCircleProps {
   isSpeaking: boolean
@@ -37,26 +37,26 @@ export function SpeakingCircle({
           'rounded-full flex items-center justify-center transition-all duration-300 border-2 overflow-hidden',
           sizeClasses[size],
           isRecording
-            ? 'bg-gradient-to-br from-red-700 to-red-800 border-red-500 shadow-lg shadow-red-500/50'
+            ? 'bg-gradient-to-br from-indigo-700 to-indigo-800 border-indigo-500 shadow-lg shadow-indigo-500/50'
             : 'bg-gradient-to-br from-zinc-700 to-zinc-800 border-zinc-600',
-          isSpeaking && !isUserCircle && 'shadow-lg shadow-blue-500/50'
+          isSpeaking && !isUserCircle && 'shadow-lg shadow-indigo-500/50'
         )}
         style={isSpeaking || isRecording ? { animation: 'gentleBounce 0.6s ease-in-out infinite' } : undefined}
       >
-        {avatar && isUserCircle ? (
+        {avatar ? (
           <img src={avatar} alt={label} className="w-full h-full object-cover" />
         ) : (
-          <span className={cn('font-medium', isRecording ? 'text-red-100' : 'text-zinc-300')}>{label}</span>
+          <span className={cn('font-medium', isRecording ? 'text-indigo-100' : 'text-zinc-300')}>{label}</span>
         )}
       </div>
 
       {showMicButton && isUserCircle && (
         <button
           className={cn(
-            'absolute inset-0 flex items-center justify-center rounded-full transition-all duration-200 cursor-pointer z-10',
+            'absolute inset-0 flex items-center justify-center rounded-full transition-all duration-200 cursor-pointer z-10 opacity-50 hover:opacity-80',
             isRecording
-              ? 'hover:bg-red-500/20 active:bg-red-500/40'
-              : 'hover:bg-blue-500/20 active:bg-blue-500/40'
+              ? 'hover:bg-indigo-500/20 active:bg-indigo-500/40'
+              : 'hover:bg-blue-500/10 active:bg-blue-500/20'
           )}
           onMouseDown={onMicPress}
           onMouseUp={onMicRelease}
@@ -67,14 +67,16 @@ export function SpeakingCircle({
         >
           <div
             className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors duration-200',
-              isRecording ? 'bg-red-500' : 'bg-blue-500'
+              'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
+              isRecording 
+                ? 'bg-indigo-500/80 shadow-md' 
+                : 'bg-blue-500/60 shadow-sm border border-blue-400/30'
             )}
           >
             {isRecording ? (
-              <Square className="w-5 h-5 text-white" />
+              <Square className="w-4 h-4 text-white" />
             ) : (
-              <Mic className="w-5 h-5 text-white" />
+              <Mic className="w-4 h-4 text-white/90" />
             )}
           </div>
         </button>
@@ -84,8 +86,8 @@ export function SpeakingCircle({
         <div className="flex flex-col items-center gap-2">
           <div
             className={cn(
-              'w-12 h-12 rounded-full bg-blue-500/20 border-2 border-blue-500 flex items-center justify-center cursor-pointer transition-all duration-200',
-              'hover:bg-blue-500/30 active:bg-blue-500/40'
+              'w-10 h-10 rounded-full bg-blue-500/10 border-2 border-blue-500/40 flex items-center justify-center cursor-pointer transition-all duration-200',
+              'hover:bg-blue-500/30 active:bg-blue-500/50 hover:border-blue-500/60'
             )}
             onMouseDown={onMicPress}
             onMouseUp={onMicRelease}
@@ -93,7 +95,7 @@ export function SpeakingCircle({
             onTouchStart={onMicPress}
             onTouchEnd={onMicRelease}
           >
-            <Mic className="w-6 h-6 text-blue-500" />
+            <Mic className="w-5 h-5 text-blue-500/70" />
           </div>
           <span className="text-xs text-zinc-400">Hold to speak</span>
         </div>
