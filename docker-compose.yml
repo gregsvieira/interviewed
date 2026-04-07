@@ -113,3 +113,5 @@ volumes:
     driver: local
   ollama-data:
     driver: local
+  postgres-data:
+    driver: local
