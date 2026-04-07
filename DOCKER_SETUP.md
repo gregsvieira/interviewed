@@ -1,42 +1,42 @@
-# Entrevista IA - Docker Setup
+# AI INTERVIEWD - Docker Setup
 
 ## Quick Start
 
-### 1. Configuração Inicial
+### 1. Initial config
 
 ```bash
-# Copie o arquivo de exemplo
+# Copy the example file.
 cp .env.example .env
 
-# Edite o .env e defina uma chave secreta forte
+# Edit the .env file and set a strong secret key.
 nano .env
 ```
 
 ### 2. Subir a Aplicação
 
-**Com GPU NVIDIA:**
+**With CPU:**
 ```bash
 docker compose up -d
 ```
 
-**Sem GPU (CPU Only):**
+**With GPU (GPU):**
 ```bash
-docker compose -f docker-compose.cpu.yml up -d
+docker compose -f docker-compose.gpu.yml up -d
 ```
 
-### 3. Baixar o Modelo de IA
+### 3. Download the AI ​​Model
 
 ```bash
-# Aguarde o Ollama iniciar (~30 segundos)
+# Wait for Ollama to start (~30 seconds)
 docker compose logs -f ollama
 
-# Quando estiver rodando, baixe o modelo:
+# When it's running, download the model:
 docker exec -it interviewed-ollama ollama pull qwen2.5-coder
 
-# O modelo tem ~7GB, pode levar alguns minutos dependendo da conexão
+# The model has approximately 7GB of RAM; it may take a few minutes depending on the connection.
 ```
 
-### 4. Acessar a Aplicação
+### 4. Access the Application
 
 - **Frontend:** http://localhost:8080
 - **Backend API:** http://localhost:3000
@@ -45,55 +45,55 @@ docker exec -it interviewed-ollama ollama pull qwen2.5-coder
 
 ---
 
-## Comandos Úteis
+## Useful Commands
 
-### Ver Logs
+### View Logs
 ```bash
-# Todos os serviços
+# All services
 docker compose logs -f
 
-# Serviço específico
+# Specific service
 docker compose logs -f backend
 docker compose logs -f frontend
 docker compose logs -f ollama
 ```
 
-### Rebuild após mudanças
+### Rebuild after changes
 ```bash
 docker compose up -d --build
 ```
 
-### Parar a aplicação
+### Stop application
 ```bash
 docker compose down
 ```
 
-### Parar e remover volumes (LIMPEZA TOTAL)
+### Stop and clean volumes (COMPLETE CLEANING)
 ```bash
 docker compose down -v
 ```
 
-### Reiniciar serviços
+### Restart services
 ```bash
 docker compose restart
 docker compose restart backend
 ```
 
-### Executar comandos no container
+### Execute commands in the container.
 ```bash
 # Backend shell
 docker exec -it interviewed-backend sh
 
-# Ver modelo instalado
+# View installed model
 docker exec -it interviewed-ollama ollama list
 
-# Testar Ollama
+# Test Ollama
 docker exec -it interviewed-ollama ollama run qwen2.5-coder "Hello"
 ```
 
 ---
 
-## Estrutura dos Containers
+## Container Structure
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -115,27 +115,27 @@ docker exec -it interviewed-ollama ollama run qwen2.5-coder "Hello"
 
 ## Troubleshooting
 
-### Ollama não inicia
+### Ollama does not initiate
 ```bash
-# Verifique logs
+# Verify logs
 docker compose logs ollama
 
-# Reinicie
+# Restart
 docker compose restart ollama
 ```
 
-### Backend não conecta com Ollama
+### Backend not connecting to Ollama
 ```bash
-# Verifique se Ollama está rodando
+# Check if Ollama is running
 docker exec -it interviewed-ollama curl http://localhost:11434/api/tags
 
-# Verifique variáveis de ambiente no backend
+# Check environment variables in the backend
 docker exec -it interviewed-backend env | grep OLLAMA
 ```
 
-### Frontend não carrega
+### Frontend not loading
 ```bash
-# Verifique logs
+# Verify logs
 docker compose logs frontend
 
 # Rebuild
@@ -144,7 +144,7 @@ docker compose up -d --build frontend
 
 ### Problemas de Permissão
 ```bash
-# Corrija permissões do volume
+# Correct volume permissions
 docker compose down
 sudo chown -R $(id -u):$(id -g) ~/.interviewed 2>/dev/null || true
 docker compose up -d
@@ -152,12 +152,12 @@ docker compose up -d
 
 ---
 
-## Produção
+## Prodution
 
-Para deploy em produção:
+For production deployment:
 
-1. **Mude o JWT_SECRET** no `.env`
-2. **Use HTTPS** (configure proxy reverso)
-3. **Considere volumes externos** para persistência
-4. **Monitore recursos** dos containers
-5. **Configure backup** do volume `interviewed-data`
+1. **Change JWT_SECRET** in `.env`
+2. **Use HTTPS** (configure reverse proxy)
+3. **Consider external volumes.** for persistence
+4. **Monitor resources** of containers
+5. **Configure backup** of volume `interviewed-data`
