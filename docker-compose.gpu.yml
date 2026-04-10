@@ -23,7 +23,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: apps/backend/Dockerfile
+      dockerfile: apps/backend/Dockerfile.gpu
     container_name: interviewed-backend
     restart: unless-stopped
     ports:
@@ -35,6 +35,7 @@ services:
       - JWT_EXPIRES_IN=7d
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=qwen2.5-coder
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
       - STT_SERVICE_URL=http://stt-service:8001
       - HOME=/home/node
     volumes:
