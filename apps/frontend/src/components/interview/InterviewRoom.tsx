@@ -41,6 +41,8 @@ export function InterviewRoom() {
   const webSpeechFinalTextRef = useRef('')
   const webSpeechSentRef = useRef(false)
   const currentUserMessageIdRef = useRef<string | null>(null)
+  const sttServiceStartedRef = useRef(false)
+  const sttStartPromiseRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     profileApi.getProfile().then((profile) => {
@@ -279,38 +281,44 @@ export function InterviewRoom() {
     setUserLiveText('')
     setIsRecording(true)
     setManualText('')
+    sttServiceStartedRef.current = false
 
-    if (webSpeechService.isSupported()) {
-      webSpeechService.onInterimResult((text) => {
-        setUserLiveText(text)
-        setLiveTranscriptActive(true)
-      })
-      webSpeechService.onResult((text) => {
-        webSpeechFinalTextRef.current = text
-        setUserLiveText('')
-        setLiveTranscriptActive(false)
-      })
-      webSpeechService.onSpeakingChange((speaking) => {
-        if (!speaking) {
-          setLiveTranscriptActive(false)
-          const finalText = webSpeechFinalTextRef.current.trim()
-          if (finalText && socketRef.current?.connected && !webSpeechSentRef.current) {
-            console.log('[InterviewRoom] WebSpeech final text:', finalText)
-            const messageId = currentUserMessageIdRef.current!
-            addMessage({ id: messageId, role: 'user', text: finalText })
-            socketRef.current?.emit('user:text', { interviewId: interviewIdRef.current, id: messageId, text: finalText })
-            webSpeechSentRef.current = true
-          }
-          webSpeechFinalTextRef.current = ''
-        }
-      })
-      try {
-        await webSpeechService.start()
-        return
-      } catch (e) {
-        console.log('[InterviewRoom] WebSpeechSTT failed to start:', e)
-      }
-    }
+    // NOTE: Web Speech API is temporarily disabled because it has issues with 'network' error
+    // on some browsers. The onstart event fires before onerror, causing the promise to resolve
+    // before we can detect the error. MediaRecorder is used as the primary STT solution.
+    // To re-enable Web Speech API, uncomment the block below and remove the direct MediaRecorder call.
+    //
+    // if (webSpeechService.isSupported()) {
+    //   webSpeechService.onInterimResult((text) => {
+    //     setUserLiveText(text)
+    //     setLiveTranscriptActive(true)
+    //   })
+    //   webSpeechService.onResult((text) => {
+    //     webSpeechFinalTextRef.current = text
+    //     setUserLiveText('')
+    //     setLiveTranscriptActive(false)
+    //   })
+    //   webSpeechService.onSpeakingChange((speaking) => {
+    //     if (!speaking) {
+    //       setLiveTranscriptActive(false)
+    //       const finalText = webSpeechFinalTextRef.current.trim()
+    //       if (finalText && socketRef.current?.connected && !webSpeechSentRef.current) {
+    //         console.log('[InterviewRoom] WebSpeech final text:', finalText)
+    //         const messageId = currentUserMessageIdRef.current!
+    //         addMessage({ id: messageId, role: 'user', text: finalText })
+    //         socketRef.current?.emit('user:text', { interviewId: interviewIdRef.current, id: messageId, text: finalText })
+    //         webSpeechSentRef.current = true
+    //       }
+    //       webSpeechFinalTextRef.current = ''
+    //     }
+    //   })
+    //   try {
+    //     await webSpeechService.start()
+    //     return
+    //   } catch (e) {
+    //     console.log('[InterviewRoom] WebSpeechSTT failed to start:', e)
+    //   }
+    // }
 
     if (!sttService.isSupported()) {
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
@@ -330,47 +338,54 @@ export function InterviewRoom() {
       return
     }
 
-    try {
-      await sttService.start({
-        onSpeakingChange: (speaking) => {
-          setUserSpeaking(speaking)
-        },
-        onChunk: async (chunk) => {
-          console.log('[InterviewRoom] Audio chunk:', chunk.size, 'bytes');
-          
-          if (!socketRef.current?.connected) {
-            console.log('[InterviewRoom] Socket not connected, skipping chunk');
-            return
+    console.log('[InterviewRoom] MediaRecorder is supported, starting...');
+    sttStartPromiseRef.current = (async () => {
+      console.log('[InterviewRoom] MediaRecorder async function started');
+      try {
+        await sttService.start({
+          onSpeakingChange: (speaking) => {
+            setUserSpeaking(speaking)
+          },
+          onChunk: async (chunk) => {
+            console.log('[InterviewRoom] Audio chunk:', chunk.size, 'bytes');
+            
+            if (!socketRef.current?.connected) {
+              console.log('[InterviewRoom] Socket not connected, skipping chunk');
+              return
+            }
+            
+            try {
+              const arrayBuffer = await chunk.arrayBuffer()
+              socketRef.current?.emit('audio:chunk', { interviewId: interviewIdRef.current, audio: arrayBuffer })
+            } catch (err) {
+              console.error('[InterviewRoom] Error converting chunk:', err)
+            }
+          },
+          onError: (error) => {
+            console.error('[InterviewRoom] STT error:', error);
+            setSttError(error)
+            setIsRecording(false)
           }
-          
-          try {
-            const arrayBuffer = await chunk.arrayBuffer()
-            socketRef.current?.emit('audio:chunk', { interviewId: interviewIdRef.current, audio: arrayBuffer })
-          } catch (err) {
-            console.error('[InterviewRoom] Error converting chunk:', err)
-          }
-        },
-        onError: (error) => {
-          console.error('[InterviewRoom] STT error:', error);
-          setSttError(error)
-          setIsRecording(false)
+        })
+        sttServiceStartedRef.current = true
+        console.log('[InterviewRoom] Audio streaming started')
+      } catch (err: any) {
+        console.error('[InterviewRoom] Audio streaming start error:', err)
+        
+        let errorMsg = 'Voice recognition not available. Please use manual input below.'
+        if (err?.message?.includes('timeout')) {
+          errorMsg = 'Connection timeout. Please check your network and try again.'
+        } else if (err?.message?.includes('Permission denied')) {
+          errorMsg = 'Microphone permission denied. Please allow microphone access in your browser settings.'
         }
-      })
-      console.log('[InterviewRoom] Audio streaming started')
-    } catch (err: any) {
-      console.error('[InterviewRoom] Audio streaming start error:', err)
-      
-      let errorMsg = 'Voice recognition not available. Please use manual input below.'
-      if (err?.message?.includes('timeout')) {
-        errorMsg = 'Connection timeout. Please check your network and try again.'
-      } else if (err?.message?.includes('Permission denied')) {
-        errorMsg = 'Microphone permission denied. Please allow microphone access in your browser settings.'
+        
+        setSttError(errorMsg)
+        setUserSpeaking(false)
+        setIsRecording(false)
+      } finally {
+        sttStartPromiseRef.current = null
       }
-      
-      setSttError(errorMsg)
-      setUserSpeaking(false)
-      setIsRecording(false)
-    }
+    })()
   }
 
   const handleManualSubmit = () => {
@@ -389,13 +404,27 @@ export function InterviewRoom() {
     setSttError(null)
   }
 
-  const handleMicRelease = () => {
-    console.log('[InterviewRoom] Mic released, webSpeechSent:', webSpeechSentRef.current);
+  const handleMicRelease = async () => {
+    console.log('[InterviewRoom] Mic released, webSpeechSent:', webSpeechSentRef.current, 'sttStarted:', sttServiceStartedRef.current);
+    
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current)
       silenceTimeoutRef.current = null
     }
-    sttService.stop()
+    
+    if (sttStartPromiseRef.current) {
+      console.log('[InterviewRoom] Waiting for STT service to finish starting...');
+      await sttStartPromiseRef.current
+      console.log('[InterviewRoom] STT service start completed');
+    }
+    
+    if (sttServiceStartedRef.current) {
+      console.log('[InterviewRoom] Stopping STT service (was started)');
+      sttService.stop()
+    } else {
+      console.log('[InterviewRoom] STT service was not started, skipping stop');
+    }
+    
     webSpeechService.stop()
     setUserSpeaking(false)
     setUserSpeakingText('')
@@ -432,7 +461,7 @@ export function InterviewRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen max-h-[100vh] bg-zinc-950 flex flex-col h-screen overflow-hidden">
       <header className="p-2 border-b border-zinc-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-zinc-300 text-sm font-medium">
