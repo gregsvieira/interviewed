@@ -1,10 +1,10 @@
 import { Controller, Get, Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { BootstrapModule } from './bootstrap/bootstrap.module';
 import { EvaluationsModule } from './evaluations/evaluations.module';
-import { InterviewModule } from './interview/interview.module';
+import { InterviewsModule } from './interviews/interviews.module';
 import { ProfileModule } from './profile/profile.module';
 import { QuestionsModule } from './questions/questions.module';
-import { StorageModule } from './storage/storage.module';
 import { TopicsModule } from './topics/topics.module';
 
 @Controller()
@@ -17,10 +17,10 @@ class HealthController {
 
 @Module({
   imports: [
-    StorageModule,
+    BootstrapModule,
     TopicsModule,
     AuthModule,
-    InterviewModule,
+    InterviewsModule,
     ProfileModule,
     QuestionsModule,
     EvaluationsModule,

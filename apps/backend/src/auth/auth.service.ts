@@ -1,8 +1,7 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { StorageService } from '../storage/storage.service';
-import { User, UserWithoutPassword } from './entities/user.entity';
+import { UsersRepository } from './users.repository';
 
 const DEFAULT_TOPICS = [
   'softskills',
@@ -14,84 +13,165 @@ const DEFAULT_TOPICS = [
 ];
 
 export interface AuthResult {
-  user: UserWithoutPassword;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    improvementTopics: string[];
+    lastInterviewDate: Date | null;
+    avatar: string | null;
+    createdAt: Date | null;
+  };
   token: string;
 }
 
 @Injectable()
 export class AuthService {
   constructor(
-    private storage: StorageService,
+    private usersRepository: UsersRepository,
     private jwtService: JwtService,
   ) {}
 
   async register(email: string, password: string, name: string): Promise<AuthResult> {
-    const existingUsers = await this.storage.getAll<User>('users');
-    if (existingUsers.find(u => u.email === email)) {
+    const existingUser = await this.usersRepository.findByEmail(email);
+    if (existingUser) {
       throw new ConflictException('Email already exists');
     }
 
-    const user: User = {
-      id: crypto.randomUUID(),
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await this.usersRepository.create({
       email,
+      passwordHash,
       name,
-      passwordHash: await bcrypt.hash(password, 10),
-      createdAt: new Date(),
       improvementTopics: [...DEFAULT_TOPICS],
-      lastInterviewDate: null,
-    };
-
-    await this.storage.save('users', user.id, user);
+    });
 
     const token = this.jwtService.sign({ sub: user.id, email: user.email });
-    const { passwordHash: _, ...userWithoutPassword } = user;
 
-    return { user: userWithoutPassword, token };
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        improvementTopics: user.improvementTopics || [],
+        lastInterviewDate: user.lastInterviewDate,
+        avatar: user.avatar,
+        createdAt: user.createdAt,
+      },
+      token,
+    };
   }
 
   async login(email: string, password: string): Promise<AuthResult> {
-    const user = await this.storage.findByField<User>('users', 'email', email);
+    const user = await this.usersRepository.findByEmail(email);
 
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const token = this.jwtService.sign({ sub: user.id, email: user.email });
-    const { passwordHash: _, ...userWithoutPassword } = user;
 
-    return { user: userWithoutPassword, token };
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        improvementTopics: user.improvementTopics || [],
+        lastInterviewDate: user.lastInterviewDate,
+        avatar: user.avatar,
+        createdAt: user.createdAt,
+      },
+      token,
+    };
   }
 
-  async validateUser(payload: { sub: string; email: string }): Promise<UserWithoutPassword | null> {
-    const user = await this.storage.get<User>('users', payload.sub);
+  async validateUser(payload: { sub: string; email: string }): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    improvementTopics: string[];
+    lastInterviewDate: Date | null;
+    avatar: string | null;
+    createdAt: Date | null;
+  } | null> {
+    const user = await this.usersRepository.findById(payload.sub);
     if (!user) return null;
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      improvementTopics: user.improvementTopics || [],
+      lastInterviewDate: user.lastInterviewDate,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    };
   }
 
-  async getUserById(id: string): Promise<UserWithoutPassword | null> {
-    const user = await this.storage.get<User>('users', id);
+  async getUserById(id: string): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    improvementTopics: string[];
+    lastInterviewDate: Date | null;
+    avatar: string | null;
+    createdAt: Date | null;
+  } | null> {
+    const user = await this.usersRepository.findById(id);
     if (!user) return null;
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      improvementTopics: user.improvementTopics || [],
+      lastInterviewDate: user.lastInterviewDate,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    };
   }
 
-  async updateUser(id: string, updates: Partial<Pick<User, 'improvementTopics' | 'lastInterviewDate' | 'avatar'>>): Promise<UserWithoutPassword | null> {
-    const user = await this.storage.get<User>('users', id);
-    if (!user) return null;
+  async updateUser(id: string, updates: Partial<{
+    improvementTopics: string[];
+    lastInterviewDate: string;
+    avatar: string;
+  }>): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    improvementTopics: string[];
+    lastInterviewDate: Date | null;
+    avatar: string | null;
+    createdAt: Date | null;
+  } | null> {
+    const updateData: Partial<{
+      name: string;
+      improvementTopics: string[];
+      lastInterviewDate: Date;
+      avatar: string;
+    }> = {};
 
     if (updates.improvementTopics !== undefined) {
-      user.improvementTopics = updates.improvementTopics;
+      updateData.improvementTopics = updates.improvementTopics;
     }
     if (updates.lastInterviewDate !== undefined) {
-      user.lastInterviewDate = updates.lastInterviewDate;
+      updateData.lastInterviewDate = new Date(updates.lastInterviewDate);
     }
     if (updates.avatar !== undefined) {
-      user.avatar = updates.avatar;
+      updateData.avatar = updates.avatar;
     }
 
-    await this.storage.save('users', user.id, user);
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    const user = await this.usersRepository.update(id, updateData);
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      improvementTopics: user.improvementTopics || [],
+      lastInterviewDate: user.lastInterviewDate,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    };
   }
 }

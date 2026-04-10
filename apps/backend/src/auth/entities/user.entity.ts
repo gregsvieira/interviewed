@@ -3,10 +3,10 @@ export interface User {
   email: string;
   name: string;
   passwordHash: string;
-  createdAt: Date;
-  improvementTopics: string[];
-  lastInterviewDate: string | null;
-  avatar?: string;
+  createdAt: Date | null;
+  improvementTopics: string[] | null;
+  lastInterviewDate: Date | null;
+  avatar: string | null;
 }
 
 export type UserWithoutPassword = Omit<User, 'passwordHash'>;

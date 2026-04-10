@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import { evaluations as evaluationsTable } from '../db/schema';
-import { sql } from 'drizzle-orm';
-import { OllamaService } from '../interview/ai/ollama.service';
-import { createEvaluationPrompt, EvaluationQA } from '../interview/ai/prompts/evaluation.prompt';
+import { OllamaService } from '../interviews/ai/ollama.service';
+import { createEvaluationPrompt, EvaluationQA } from '../interviews/ai/prompts/evaluation.prompt';
 import { QuestionsService } from '../questions/questions.service';
 
 export interface QuestionEvaluation {

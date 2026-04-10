@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
+import { InterviewsModule } from '../interviews/interviews.module';
+import { QuestionsModule } from '../questions/questions.module';
 import { EvaluationsController } from './evaluations.controller';
 import { EvaluationsService } from './evaluations.service';
-import { QuestionsModule } from '../questions/questions.module';
-import { InterviewModule } from '../interview/interview.module';
 
 @Module({
-  imports: [QuestionsModule, InterviewModule],
+  imports: [QuestionsModule, InterviewsModule],
   controllers: [EvaluationsController],
   providers: [EvaluationsService],
   exports: [EvaluationsService],

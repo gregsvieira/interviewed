@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { WsJwtGuard } from './ws-jwt.guard';
+import { UsersRepository } from './users.repository';
 import { config } from '../config';
 
 @Module({
@@ -16,7 +17,7 @@ import { config } from '../config';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, WsJwtGuard],
+  providers: [AuthService, JwtStrategy, WsJwtGuard, UsersRepository],
   exports: [AuthService, JwtModule, WsJwtGuard],
 })
 export class AuthModule {}

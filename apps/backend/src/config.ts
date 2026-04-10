@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import * as toml from 'toml';
 
@@ -10,6 +10,7 @@ interface Config {
   OLLAMA_MODEL: string;
   STORAGE_PATH: string;
   STT_SERVICE_URL: string;
+  OLLAMA_EMBEDDING_MODEL: string;
 }
 
 let config: Config;
@@ -28,6 +29,7 @@ try {
       OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'qwen2.5-coder',
       STORAGE_PATH: process.env.STORAGE_PATH || '~/.interviewed',
       STT_SERVICE_URL: process.env.STT_SERVICE_URL || 'http://localhost:8001',
+      OLLAMA_EMBEDDING_MODEL: process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text',
     };
   }
 } catch {
@@ -39,6 +41,7 @@ try {
     OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'qwen2.5-coder',
     STORAGE_PATH: process.env.STORAGE_PATH || '~/.interviewed',
     STT_SERVICE_URL: process.env.STT_SERVICE_URL || 'http://localhost:8001',
+    OLLAMA_EMBEDDING_MODEL: process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text',
   };
 }
 
