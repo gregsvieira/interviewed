@@ -22,6 +22,7 @@ interface ActiveInterview {
     origin: '*',
   },
 })
+
 export class InterviewsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -32,6 +33,10 @@ export class InterviewsGateway implements OnGatewayConnection, OnGatewayDisconne
     private interviewService: InterviewsService,
     private jwtService: JwtService,
   ) {}
+
+  afterInit(server: Server) {
+    console.log(this.server.sockets.adapter);
+  }
 
   async handleConnection(client: Socket) {
     console.log('=== Client connecting:', client.id);

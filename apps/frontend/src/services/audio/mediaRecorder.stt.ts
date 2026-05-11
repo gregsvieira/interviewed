@@ -50,7 +50,11 @@ export class MediaRecorderService {
       this.mediaRecorder.ondataavailable = (event) => {
         if (this.isStopped) return
         if (event.data.size > 0) {
-          console.log('[MediaRecorderService] Audio chunk available:', event.data.size, 'bytes')
+          console.log('[MediaRecorderService] Audio chunk available:', event.data.size)
+      
+          console.log('[DEBUG] callbacks object:', this.callbacks)
+          console.log('[DEBUG] has onChunk?', !!this.callbacks.onChunk)
+      
           this.callbacks.onChunk?.(event.data)
         }
       }

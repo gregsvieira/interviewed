@@ -6,8 +6,8 @@ import { InterviewPage } from '@/pages/InterviewPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { useAuthStore } from '@/stores/auth.store'
-import { Navigate, Route, Routes } from 'react-router-dom'
 import { useEffect } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)

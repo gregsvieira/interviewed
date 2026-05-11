@@ -1,15 +1,16 @@
 import { Button } from '@/components/ui/button'
-import { WS_URL } from '@/lib/utils'
 import { profileApi } from '@/services/api/profile.api'
 import { MediaRecorderService } from '@/services/audio/mediaRecorder.stt'
 import { WebSpeechSTT } from '@/services/audio/webSpeech.stt'
 import { WebSpeechTTS } from '@/services/audio/webSpeech.tts'
+import { disconnectInterview, startInterview as startInterviewGateway } from '@/services/websocket/interview.gateway'
+import { getSocket } from '@/services/websocket/socket'
 import { useAuthStore } from '@/stores/auth.store'
 import { useInterviewStore } from '@/stores/interview.store'
 import { ChevronDown, ChevronUp, Clock, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { io, Socket } from 'socket.io-client'
+import { Socket } from 'socket.io-client'
 import { ConversationLog } from './ConversationLog'
 import { LiveTranscript } from './LiveTranscript'
 import { SpeakingCircle } from './SpeakingCircle'
@@ -43,6 +44,7 @@ export function InterviewRoom() {
   const currentUserMessageIdRef = useRef<string | null>(null)
   const sttServiceStartedRef = useRef(false)
   const sttStartPromiseRef = useRef<Promise<void> | null>(null)
+  const interviewStartedRef = useRef(false)
 
   useEffect(() => {
     profileApi.getProfile().then((profile) => {
@@ -69,52 +71,71 @@ export function InterviewRoom() {
     const effectiveInterviewId = storedInterviewId || preloadedInterviewId
     const effectivePreloadedMessage = storedMessage ? JSON.parse(storedMessage) : preloadedMessage
     
-    const newSocket = io(WS_URL, {
-      auth: { token },
-      transports: ['websocket'],
-    })
+    const socket = getSocket(token)
+    socket.off('connect')
+    socket.off('interview:started')
+    socket.off('ai:text')
+    socket.off('ai:speaking')
+    socket.off('whisper:result')
+    socket.off('interview:ended')
+    socket.off('disconnect')
+    socket.off('connect_error')
+    socketRef.current = socket
 
-    newSocket.on('connect', () => {
-      console.log('[InterviewRoom] Socket connected!');
-      console.log('[InterviewRoom]   effectiveInterviewId:', effectiveInterviewId);
-      console.log('[InterviewRoom]   effectivePreloadedMessage:', effectivePreloadedMessage ? 'exists' : 'null');
-      
+    socket.on('connect', () => {
+      console.log('[InterviewRoom] Socket connected!')
+      console.log('[InterviewRoom] Socket ID:', socket.id)
+
       if (effectiveInterviewId) {
-        console.log('[InterviewRoom] Using preloaded interview ID:', effectiveInterviewId);
-        interviewIdRef.current = effectiveInterviewId;
+        console.log('[InterviewRoom] Reusing preloaded interview')
+      
+        interviewIdRef.current = effectiveInterviewId
+      
+        socket.emit('interview:resume', {
+          interviewId: effectiveInterviewId,
+        })
+      
         startInterview()
         setInterviewStarted(true)
-      } else if (!interviewStarted) {
-        console.log('[InterviewRoom] No preloaded ID, emitting start event...');
-        newSocket.emit('start', {
+      
+        return
+      }
+
+      if (!interviewStartedRef.current) {
+        console.log('[InterviewRoom] No preload, emitting start...')
+      
+        startInterviewGateway(token!, {
           topic: selectedTopic?.name,
           subtopic: selectedSubtopic?.name,
           level: selectedLevel,
           duration: 30,
           candidateName: user?.name || 'Candidate',
         })
+      
         startInterview()
         setInterviewStarted(true)
-      } else {
-        console.log('[InterviewRoom] Interview already started, skipping start');
+        interviewStartedRef.current = true
       }
     })
 
-    newSocket.on('interview:started', (data: { interviewId: string; candidateName: string; interviewerName: string; interviewerGender: string; interviewerAvatar?: string }) => {
+    socket.on('interview:started', (data) => {
       const storedId = localStorage.getItem('preloadedInterviewId')
+    
       if (!effectiveInterviewId && !storedId) {
-        interviewIdRef.current = data.interviewId;
+        console.log('[InterviewRoom] Setting interviewId from backend')
+        interviewIdRef.current = data.interviewId
       }
+    
       if (data.interviewerAvatar) {
-        setInterviewerAvatar(data.interviewerAvatar);
+        setInterviewerAvatar(data.interviewerAvatar)
       }
     })
 
-    newSocket.on('connect_error', (err) => {
+    socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err)
     })
 
-    newSocket.on('ai:text', (data: { text: string }) => {
+    socket.on('ai:text', (data: { text: string }) => {
       console.log('[InterviewRoom] ai:text received:', data.text?.substring(0, 50))
       if (!preloadedUsedRef.current && effectivePreloadedMessage) {
         setTypingMessage({ role: 'ai', text: effectivePreloadedMessage.text })
@@ -123,29 +144,32 @@ export function InterviewRoom() {
       }
     })
 
-    newSocket.on('ai:speaking', (speaking: boolean) => {
+    socket.on('ai:speaking', (speaking: boolean) => {
       setAiSpeaking(speaking)
     })
 
-    newSocket.on('stt:result', (data: { text: string }) => {
+    socket.on('stt:result', (data: { text: string }) => {
       console.log('[InterviewRoom] stt:result received (ignoring - using whisper:result instead):', data.text?.substring(0, 30))
     })
 
-    newSocket.on('whisper:result', (data: { id: string; text: string; correcting?: boolean }) => {
-      console.log('[InterviewRoom] whisper:result received:', { id: data.id, text: data.text?.substring(0, 30), correcting: data.correcting })
-      if (data.text) {
-        updateMessage(data.id, data.text)
-        if (socketRef.current?.connected) {
-          console.log('[InterviewRoom] Emitting user:text after whisper result');
-          socketRef.current.emit('user:text', { interviewId: interviewIdRef.current, id: data.id, text: data.text })
-        }
-      }
-      if (data.correcting && currentUserMessageIdRef.current === data.id) {
-        setUserSpeakingText(data.text)
+    socket.on('whisper:result', (data: { id: string; text: string }) => {
+      console.log('[whisper:result]', data)
+    
+      const id = data.id || currentUserMessageIdRef.current
+      if (!id || !data.text) return
+    
+      updateMessage(id, data.text)
+    
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('user:text', {
+          interviewId: interviewIdRef.current,
+          id,
+          text: data.text,
+        })
       }
     })
 
-    newSocket.on('interview:ended', () => {
+    socket.on('interview:ended', () => {
       setPreloadedMessage(null)
       setPreloadedInterviewId(null)
       localStorage.removeItem('preloadedInterviewId')
@@ -157,18 +181,17 @@ export function InterviewRoom() {
       navigate('/history')
     })
 
-    newSocket.on('disconnect', () => {
+    socket.on('disconnect', () => {
       endInterview()
     })
 
-    socketRef.current = newSocket
     ttsService.onSpeakingChange(setAiSpeaking)
 
     return () => {
-      newSocket.disconnect()
+      disconnectInterview()
       ttsService.stop()
     }
-  }, [token, selectedTopic, selectedSubtopic])
+  }, [token])
 
   useEffect(() => {
     return () => {
@@ -255,7 +278,15 @@ export function InterviewRoom() {
         setUserSpeaking(false)
         setUserSpeakingText('')
         setIsRecording(false)
-        socketRef.current?.emit('audio:transcribe', {})
+        const id = currentUserMessageIdRef.current
+        const interviewId = interviewIdRef.current
+
+        if (!id || !interviewId) return
+
+        socketRef.current?.emit('audio:transcribe', {
+          interviewId,
+          id,
+        })
       }, 2000)
     }
 
@@ -271,121 +302,131 @@ export function InterviewRoom() {
   }, [isRecording])
 
   const handleMicPress = async () => {
-    console.log('[InterviewRoom] Mic pressed');
+    console.log('[InterviewRoom] Mic pressed')
+  
+    if (!socketRef.current?.connected) {
+      console.log('[InterviewRoom] Socket not ready, aborting mic start')
+      return
+    }
+    
     setSttError(null)
     accumulatedTextRef.current = ''
     webSpeechFinalTextRef.current = ''
     webSpeechSentRef.current = false
-    currentUserMessageIdRef.current = crypto.randomUUID()
+  
+    const messageId = crypto.randomUUID()
+    currentUserMessageIdRef.current = messageId
+  
+    // 🔥 cria mensagem otimista
+    addMessage({
+      id: messageId,
+      role: 'user',
+      text: '...', // ou '' se preferir
+    })
+  
     setUserSpeakingText('')
     setUserLiveText('')
+    setLiveTranscriptActive(false)
     setIsRecording(true)
     setManualText('')
+  
     sttServiceStartedRef.current = false
-
-    // NOTE: Web Speech API is temporarily disabled because it has issues with 'network' error
-    // on some browsers. The onstart event fires before onerror, causing the promise to resolve
-    // before we can detect the error. MediaRecorder is used as the primary STT solution.
-    // To re-enable Web Speech API, uncomment the block below and remove the direct MediaRecorder call.
-    //
-    // if (webSpeechService.isSupported()) {
-    //   webSpeechService.onInterimResult((text) => {
-    //     setUserLiveText(text)
-    //     setLiveTranscriptActive(true)
-    //   })
-    //   webSpeechService.onResult((text) => {
-    //     webSpeechFinalTextRef.current = text
-    //     setUserLiveText('')
-    //     setLiveTranscriptActive(false)
-    //   })
-    //   webSpeechService.onSpeakingChange((speaking) => {
-    //     if (!speaking) {
-    //       setLiveTranscriptActive(false)
-    //       const finalText = webSpeechFinalTextRef.current.trim()
-    //       if (finalText && socketRef.current?.connected && !webSpeechSentRef.current) {
-    //         console.log('[InterviewRoom] WebSpeech final text:', finalText)
-    //         const messageId = currentUserMessageIdRef.current!
-    //         addMessage({ id: messageId, role: 'user', text: finalText })
-    //         socketRef.current?.emit('user:text', { interviewId: interviewIdRef.current, id: messageId, text: finalText })
-    //         webSpeechSentRef.current = true
-    //       }
-    //       webSpeechFinalTextRef.current = ''
-    //     }
-    //   })
-    //   try {
-    //     await webSpeechService.start()
-    //     return
-    //   } catch (e) {
-    //     console.log('[InterviewRoom] WebSpeechSTT failed to start:', e)
-    //   }
-    // }
-
-    if (!sttService.isSupported()) {
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      
-      let errorMsg = 'Voice recognition not available. Please use manual input below.'
-      if (isSafari) {
-        errorMsg = 'Safari requires microphone permission. Please allow microphone access and try again.'
-      } else if (isIOS) {
-        errorMsg = 'Voice input not supported on this iOS device. Please use manual input below.'
+  
+    // 🧠 WebSpeech = preview
+    if (webSpeechService.isSupported()) {
+      try {
+        webSpeechService.onInterimResult((text) => {
+          setUserLiveText(text)
+          setLiveTranscriptActive(true)
+  
+          const id = currentUserMessageIdRef.current
+          if (id) {
+            updateMessage(id, text)
+          }
+        })
+  
+        webSpeechService.onResult((text) => {
+          webSpeechFinalTextRef.current = text
+  
+          const id = currentUserMessageIdRef.current
+          if (id && text.trim()) {
+            updateMessage(id, text)
+          }
+  
+          setUserLiveText('')
+          setLiveTranscriptActive(false)
+        })
+  
+        webSpeechService.onSpeakingChange((speaking) => {
+          if (!speaking) {
+            setLiveTranscriptActive(false)
+          }
+        })
+  
+        await webSpeechService.start()
+        console.log('[InterviewRoom] WebSpeech started')
+      } catch (err) {
+        console.warn('[InterviewRoom] WebSpeech failed (fallback):', err)
       }
-      
-      console.error('[InterviewRoom] STT not supported:', { isSafari, isIOS })
-      setSttError(errorMsg)
-      setUserSpeaking(false)
+    }
+  
+    // Thruth Source
+    if (!sttService.isSupported()) {
+      setSttError('Voice recognition not available.')
       setIsRecording(false)
       return
     }
-
-    console.log('[InterviewRoom] MediaRecorder is supported, starting...');
+  
+    if (sttStartPromiseRef.current) return
+  
     sttStartPromiseRef.current = (async () => {
-      console.log('[InterviewRoom] MediaRecorder async function started');
       try {
         await sttService.start({
           onSpeakingChange: (speaking) => {
             setUserSpeaking(speaking)
           },
           onChunk: async (chunk) => {
-            console.log('[InterviewRoom] Audio chunk:', chunk.size, 'bytes');
-            
+
             if (!socketRef.current?.connected) {
-              console.log('[InterviewRoom] Socket not connected, skipping chunk');
+              console.log('[WARN] socket not ready, dropping chunk')
               return
             }
-            
-            try {
-              const arrayBuffer = await chunk.arrayBuffer()
-              socketRef.current?.emit('audio:chunk', { interviewId: interviewIdRef.current, audio: arrayBuffer })
-            } catch (err) {
-              console.error('[InterviewRoom] Error converting chunk:', err)
+          
+            if (chunk.size < 200) {
+              console.log('[IGNORED SMALL CHUNK]')
+              return
             }
+          
+            const reader = new FileReader()
+          
+            reader.onloadend = () => {
+              console.log('[EMIT] audio:chunk')
+
+              socketRef.current?.emit('audio:chunk', {
+                interviewId: interviewIdRef.current,
+                audio: reader.result,
+              })
+            }
+          
+            reader.readAsDataURL(chunk)
           },
           onError: (error) => {
-            console.error('[InterviewRoom] STT error:', error);
+            console.error('[STT error]', error)
             setSttError(error)
             setIsRecording(false)
-          }
+          },
         })
+  
         sttServiceStartedRef.current = true
-        console.log('[InterviewRoom] Audio streaming started')
-      } catch (err: any) {
-        console.error('[InterviewRoom] Audio streaming start error:', err)
-        
-        let errorMsg = 'Voice recognition not available. Please use manual input below.'
-        if (err?.message?.includes('timeout')) {
-          errorMsg = 'Connection timeout. Please check your network and try again.'
-        } else if (err?.message?.includes('Permission denied')) {
-          errorMsg = 'Microphone permission denied. Please allow microphone access in your browser settings.'
-        }
-        
-        setSttError(errorMsg)
-        setUserSpeaking(false)
+      } catch (err) {
+        console.error('[MediaRecorder error]', err)
         setIsRecording(false)
       } finally {
         sttStartPromiseRef.current = null
       }
     })()
+    
+    await sttStartPromiseRef.current
   }
 
   const handleManualSubmit = () => {
@@ -405,39 +446,35 @@ export function InterviewRoom() {
   }
 
   const handleMicRelease = async () => {
-    console.log('[InterviewRoom] Mic released, webSpeechSent:', webSpeechSentRef.current, 'sttStarted:', sttServiceStartedRef.current);
-    
+    console.log('[InterviewRoom] Mic released')
+  
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current)
       silenceTimeoutRef.current = null
     }
-    
+  
     if (sttStartPromiseRef.current) {
-      console.log('[InterviewRoom] Waiting for STT service to finish starting...');
       await sttStartPromiseRef.current
-      console.log('[InterviewRoom] STT service start completed');
     }
-    
+  
     if (sttServiceStartedRef.current) {
-      console.log('[InterviewRoom] Stopping STT service (was started)');
       sttService.stop()
-    } else {
-      console.log('[InterviewRoom] STT service was not started, skipping stop');
     }
-    
+  
     webSpeechService.stop()
+  
     setUserSpeaking(false)
-    setUserSpeakingText('')
     setUserLiveText('')
     setLiveTranscriptActive(false)
     setIsRecording(false)
-
-    console.log('[InterviewRoom] Sending audio:transcribe with messageId:', currentUserMessageIdRef.current)
-    socketRef.current?.emit('audio:transcribe', { 
+  
+    const id = currentUserMessageIdRef.current
+  
+    // 🔥 só dispara transcrição final (não cria mensagem!)
+    socketRef.current?.emit('audio:transcribe', {
       interviewId: interviewIdRef.current,
-      id: currentUserMessageIdRef.current
+      id,
     })
-    webSpeechSentRef.current = false
   }
 
   const handleEndInterview = () => {

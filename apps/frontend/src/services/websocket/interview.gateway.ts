@@ -1,21 +1,11 @@
-import { io, Socket } from 'socket.io-client'
-import { WS_URL } from '@/lib/utils'
+import { disconnectSocket, getSocket } from './socket'
 
-let socket: Socket | null = null
 
-export function getInterviewSocket(token: string): Socket {
-  if (!socket) {
-    socket = io(WS_URL, {
-      auth: { token },
-      transports: ['websocket'],
-    })
-  }
-  return socket
+export function disconnectInterview(): void {
+    disconnectSocket()
 }
 
-export function disconnectSocket(): void {
-  if (socket) {
-    socket.disconnect()
-    socket = null
-  }
+export const startInterview = (token: string, payload: any) => {
+  const socket = getSocket(token)
+  socket.emit('start', payload)
 }

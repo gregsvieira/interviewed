@@ -6,11 +6,15 @@ export class WebSpeechSTT {
   private speechStarted = false;
 
   private createRecognition(): any {
-    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
     if (!SpeechRecognitionClass) return null;
 
     const recognition = new SpeechRecognitionClass();
-    recognition.continuous = false;
+
+    recognition.continuous = true; // ✅ importante
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
@@ -28,7 +32,6 @@ export class WebSpeechSTT {
       }
 
       if (latestInterim) {
-        console.log('[STT] Interim:', latestInterim);
         if (!this.speechStarted) {
           this.speechStarted = true;
           this.speakingCallback?.(true);
@@ -37,7 +40,6 @@ export class WebSpeechSTT {
       }
 
       if (finalTranscript) {
-        console.log('[STT] Final:', finalTranscript);
         this.speechStarted = false;
         this.speakingCallback?.(false);
         this.resultCallback?.(finalTranscript.trim());
@@ -45,13 +47,6 @@ export class WebSpeechSTT {
     };
 
     recognition.onspeechend = () => {
-      console.log('[STT] Speech ended');
-      this.speechStarted = false;
-      this.speakingCallback?.(false);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.log('[STT] Error:', event.error);
       this.speechStarted = false;
       this.speakingCallback?.(false);
     };
@@ -61,46 +56,58 @@ export class WebSpeechSTT {
 
   async start(): Promise<void> {
     this.speechStarted = false;
-    
-    this.recognition = this.createRecognition();
-    
-    if (!this.recognition) {
+
+    const recognition = this.createRecognition();
+    if (!recognition) {
       throw new Error('Speech Recognition not supported');
     }
 
+    this.recognition = recognition;
+
     return new Promise((resolve, reject) => {
-      if (!this.recognition) {
-        reject(new Error('Speech Recognition not initialized'));
-        return;
-      }
+      let resolved = false;
+
+      const cleanup = () => {
+        recognition.onstart = null;
+        recognition.onerror = null;
+      };
 
       const timeout = setTimeout(() => {
-        console.log('[STT] Start timeout');
-        resolve();
-      }, 500);
+        if (!resolved) {
+          cleanup();
+          reject(new Error('Speech recognition timeout'));
+        }
+      }, 1500); // ✅ mais seguro
 
-      this.recognition.onstart = () => {
-        console.log('[STT] Recognition started');
+      recognition.onstart = () => {
+        if (resolved) return;
+        resolved = true;
         clearTimeout(timeout);
+        cleanup();
         resolve();
       };
 
-      this.recognition.onerror = (event: any) => {
-        console.log('[STT] Start error:', event.error);
+      recognition.onerror = (event: any) => {
+        if (resolved) return;
+        resolved = true;
         clearTimeout(timeout);
+        cleanup();
+
         if (event.error === 'not-allowed') {
           reject(new Error('Microphone not allowed'));
+        } else if (event.error === 'network') {
+          reject(new Error('Network error'));
         } else {
-          resolve();
+          reject(new Error('Speech recognition error: ' + event.error));
         }
       };
 
       try {
-        this.recognition.start();
+        recognition.start();
       } catch (err) {
-        console.log('[STT] Start exception:', err);
         clearTimeout(timeout);
-        resolve();
+        cleanup();
+        reject(new Error('Speech recognition start exception'));
       }
     });
   }
@@ -108,11 +115,17 @@ export class WebSpeechSTT {
   stop(): void {
     if (this.recognition) {
       try {
+        this.recognition.onstart = null;
+        this.recognition.onerror = null;
+        this.recognition.onresult = null;
+        this.recognition.onspeechend = null;
+
         this.recognition.stop();
       } catch (err) {
         console.log('[STT] Stop error:', err);
       }
     }
+
     this.recognition = null;
     this.speechStarted = false;
     this.speakingCallback?.(false);
@@ -130,10 +143,10 @@ export class WebSpeechSTT {
     this.speakingCallback = callback;
   }
 
-  onChunk(_callback: (chunks: Blob[]) => void): void {
-  }
-
   isSupported(): boolean {
-    return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    return !!(
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition
+    );
   }
 }

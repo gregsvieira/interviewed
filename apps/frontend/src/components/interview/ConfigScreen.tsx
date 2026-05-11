@@ -9,8 +9,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { INTERVIEW_DURATIONS } from '@/lib/constants'
-import { WS_URL } from '@/lib/utils'
 import { interviewApi } from '@/services/api/interview.api'
+import { disconnectSocket, getSocket } from '@/services/websocket/socket'
 import { useAuthStore } from '@/stores/auth.store'
 import { LevelOption, useInterviewStore } from '@/stores/interview.store'
 import { Gender } from '@/types/audio'
@@ -18,7 +18,6 @@ import { Subtopic, Topic } from '@/types/interview'
 import { AlertCircle, Check, Mic, MicOff, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { io, Socket } from 'socket.io-client'
 
 const LEVEL_OPTIONS: { value: LevelOption; label: string }[] = [
   { value: 'entry', label: 'Entry Level' },
@@ -37,7 +36,6 @@ export function ConfigScreen() {
   const [countdown, setCountdown] = useState<number | null>(null)
   const [preloading, setPreloading] = useState(false)
   const [micTestStatus, setMicTestStatus] = useState<MicTestStatus>('idle')
-  const socketRef = useRef<Socket | null>(null)
   const preloadedDataRef = useRef<{ text: string; interviewerName: string; interviewerGender?: Gender; interviewerAvatar?: string } | null>(null)
   const preloadedInterviewIdRef = useRef<string | null>(null)
   const navigate = useNavigate()
@@ -185,58 +183,51 @@ const testMicrophone = async () => {
 }
 
 
-  const startPreload = () => {
-    const token = localStorage.getItem('token')
-    if (!token) return
+const startPreload = () => {
+  const token = localStorage.getItem('token')
+  if (!token) return
 
-    socketRef.current = io(WS_URL, {
-      auth: { token },
-      transports: ['websocket'],
-    })
+  const socket = getSocket(token)
 
-    socketRef.current.on('connect', () => {
-      socketRef.current?.emit('start', {
-        topic: selectedTopic?.name,
-        subtopic: selectedSubtopic?.name,
-        level: level,
-        duration: duration,
-        candidateName: user?.name || 'Candidate',
-      })
-    })
+  socket.emit('start', {
+    topic: selectedTopic?.name,
+    subtopic: selectedSubtopic?.name,
+    level,
+    duration,
+    candidateName: user?.name || 'Candidate',
+  })
 
-    socketRef.current.on('interview:started', (data: { interviewId: string; candidateName: string; interviewerName: string; interviewerGender?: string; interviewerAvatar?: string }) => {
-      console.log('[ConfigScreen] interview:started received:', data);
-      preloadedInterviewIdRef.current = data.interviewId
-      setPreloadedInterviewId(data.interviewId)
-      localStorage.setItem('preloadedInterviewId', data.interviewId)
-      localStorage.setItem('preloadedInterviewerName', data.interviewerName || 'Interviewer')
-      localStorage.setItem('preloadedInterviewerGender', data.interviewerGender || 'male')
-      if (data.interviewerAvatar) {
-        localStorage.setItem('preloadedInterviewerAvatar', data.interviewerAvatar)
-      }
-      console.log('[ConfigScreen] Saved to localStorage: preloadedInterviewId =', data.interviewId);
-    })
+  socket.once('interview:started', (data) => {
+    preloadedInterviewIdRef.current = data.interviewId
+    setPreloadedInterviewId(data.interviewId)
 
-    socketRef.current.on('ai:text', (data: { text: string; interviewerName?: string; interviewerGender?: Gender; interviewerAvatar?: string }) => {
-      console.log('[ConfigScreen] ai:text received, text length:', data.text.length);
-      const preloadData = {
-        text: data.text,
-        interviewerName: data.interviewerName || 'Interviewer',
-        interviewerGender: data.interviewerGender,
-        interviewerAvatar: data.interviewerAvatar,
-      }
-      preloadedDataRef.current = preloadData
-      localStorage.setItem('preloadedMessage', JSON.stringify(preloadData))
-      console.log('[ConfigScreen] Saved preloadedMessage to localStorage');
-      setPreloading(false)
-      socketRef.current?.disconnect()
-      socketRef.current = null
-    })
+    localStorage.setItem('preloadedInterviewId', data.interviewId)
+    localStorage.setItem('preloadedInterviewerName', data.interviewerName || 'Interviewer')
+    localStorage.setItem('preloadedInterviewerGender', data.interviewerGender || 'male')
 
-    socketRef.current.on('connect_error', () => {
-      setPreloading(false)
-    })
-  }
+    if (data.interviewerAvatar) {
+      localStorage.setItem('preloadedInterviewerAvatar', data.interviewerAvatar)
+    }
+  })
+
+  socket.once('ai:text', (data) => {
+    const preloadData = {
+      text: data.text,
+      interviewerName: data.interviewerName || 'Interviewer',
+      interviewerGender: data.interviewerGender,
+      interviewerAvatar: data.interviewerAvatar,
+    }
+
+    preloadedDataRef.current = preloadData
+    localStorage.setItem('preloadedMessage', JSON.stringify(preloadData))
+
+    setPreloading(false)
+  })
+
+  socket.on('connect_error', () => {
+    setPreloading(false)
+  })
+}
 
   const handleStart = () => {
     if (selectedTopic && selectedSubtopic) {
@@ -274,10 +265,7 @@ const testMicrophone = async () => {
     localStorage.removeItem('preloadedInterviewerName')
     localStorage.removeItem('preloadedInterviewerGender')
     localStorage.removeItem('preloadedInterviewerAvatar')
-    if (socketRef.current) {
-      socketRef.current.disconnect()
-      socketRef.current = null
-    }
+    disconnectSocket()
   }
 
   const isStarting = countdown !== null
